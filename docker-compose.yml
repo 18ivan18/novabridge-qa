@@ -1,0 +1,65 @@
+x-backend: &backend
+  build: ./backend
+  image: novabridge-qa-api
+  env_file: .env
+  environment:
+    # Overrides .env, whose ./data is the path for running outside Docker.
+    DATA_DIR: /app/data
+  volumes:
+    - data:/app/data
+
+services:
+  # Runs before the API and exits. It cannot run beside it: Chroma's local store is for one
+  # process at a time. Files already indexed are skipped, so later starts take a few seconds.
+  ingest:
+    <<: *backend
+    command: ["python", "scripts/ingest.py"]
+
+  api:
+    <<: *backend
+    depends_on:
+      ingest:
+        condition: service_completed_successfully
+    healthcheck:
+      # Python because the slim image has no curl. Uvicorn only answers once startup has finished.
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  web:
+    build: ./frontend
+    image: novabridge-qa-web
+    # Local only: the app has no authentication.
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Optional local LLM: docker compose --profile local-llm up --build
+  # Then pull a model: docker compose exec ollama ollama pull <model>
+  ollama:
+    profiles: ["local-llm"]
+    image: ollama/ollama:latest
+    volumes:
+      - ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  data:
+  ollama:

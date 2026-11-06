@@ -436,7 +436,7 @@ list, retrieval details toggle, no-evidence card, upload dialog with queue and p
 Backend Dockerfile (multi-stage, CPU torch, non-root user, embedding model downloaded at build time or cached
 in a volume, with the trade-off noted); frontend Dockerfile (build → nginx); `docker-compose.yml` with
 healthchecks, a `data` volume, an ingest-on-first-start step, and an optional `ollama` profile.
-✅ On a clean clone: `cp .env.example .env`, set a key, `docker compose up --build`, open
+✅ On a clean clone: `cp .env.example .env`, set a key and a model, `docker compose up --build`, open
 `http://localhost:8080`, ask a question, get a cited answer.
 
 **M11 — README, Swagger docs, logs, final pass**
