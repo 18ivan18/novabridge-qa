@@ -408,14 +408,16 @@ level in production mode).
 
 **M8 — Upload**
 `POST /api/documents`, `GET /api/jobs/{id}`, job registry, background ingestion, BM25 rebuild under the
-lock, dedup by `doc_id`, size/type validation, a clear error for PDFs with no text.
-✅ API tests for success, duplicate, too large, unsupported type and no-text PDF; a manual upload of a real PDF
-answers a question about it.
+lock, dedup by `doc_id`, size/type validation, a clear error for files with no text. Accepts TXT and Markdown
+(D10); PDFs get `415` until M8b.
+✅ API tests for success, duplicate, too large, unsupported type and no-text file; a manual upload of a real TXT
+file answers a question about it.
 
 **M8b — HTML and PDF loaders (gradual, one commit each)**
 First HTML (BeautifulSoup with scripts/styles/hidden XBRL removed), then PDF (pypdf with page numbers). Add each
 to ingestion and to the upload's accepted types. Ingest the current HTML 10-Ks and re-run the eval on them.
-✅ Loader unit tests with synthetic fixtures; a real file of each format answers a question.
+✅ Loader unit tests with synthetic fixtures; an API test for a no-text PDF (`422`); a real file of each format
+answers a question.
 
 **M8c — Embedder comparison**
 Compare fastembed, Qwen3-0.6B and harrier-0.6b with `run_eval.py`, using a separate index per model. Retune
@@ -467,7 +469,8 @@ re-ranker, LLM-as-judge faithfulness eval, filters by period.
 4. Architecture diagram + request flow
 5. Design decisions & trade-offs (D1–D13, condensed), including **why no LlamaIndex**
 6. Retrieval evaluation results (the table from M4) and what was tuned
-7. How hallucination is limited (prompt, gate, citation validation) and what it still can't guarantee
+7. How hallucination is limited (prompt, gate, citation validation) and what it still can't guarantee,
+   including the false-claim limitation in `backend/eval/decisions.md`
 8. Limitations and what I'd do next for production (queue, auth, persistence, OCR, re-ranking, monitoring)
 9. Testing (how to run; what's covered)
 10. **AI assistance:** which tools were used for which parts, where the logs are, and notable places where
