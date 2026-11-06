@@ -38,5 +38,7 @@ plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# scripts/ is not a package, so make it importable for tests.
+pythonpath = ["scripts"]
 # importlib mode lets tests/unit and tests/api hold same-named files without __init__.py packages.
 addopts = "--import-mode=importlib"
