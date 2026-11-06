@@ -80,6 +80,8 @@ def _where(filters: SearchFilters | None) -> dict[str, Any] | None:
         clauses.append({"ticker": {"$in": list(filters.tickers)}})
     if filters.doc_types:
         clauses.append({"doc_type": {"$in": list(filters.doc_types)}})
+    if filters.sources:
+        clauses.append({"source": {"$in": list(filters.sources)}})
     if not clauses:
         return None
     # Chroma rejects "$and" with a single clause.

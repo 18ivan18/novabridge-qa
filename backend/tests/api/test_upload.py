@@ -10,6 +10,7 @@ from httpx import Response
 
 from novabridge_qa.api.deps import get_upload_service
 from novabridge_qa.container import Container, rebuild_sparse_index
+from novabridge_qa.domain.models import SearchFilters
 from novabridge_qa.ingestion import uploads
 from novabridge_qa.ingestion.uploads import UploadService
 from novabridge_qa.retrieval.embedder import Embedder, FakeEmbedder
@@ -95,6 +96,15 @@ def test_uploaded_document_is_searchable_by_both_retrievers(harness: Harness) ->
 
     assert harness.retriever.search("blacksmiths", 3, mode="sparse")
     assert harness.retriever.search("blacksmiths", 3, mode="dense")
+
+
+def test_uploads_can_be_searched_on_their_own(harness: Harness) -> None:
+    harness.upload()
+    uploads_only = SearchFilters(sources=("upload",))
+    filings_only = SearchFilters(sources=("edgar",))
+
+    assert harness.retriever.search("blacksmiths", 3, uploads_only)
+    assert harness.retriever.search("blacksmiths", 3, filings_only) == []
 
 
 def test_markdown_and_uppercase_suffixes_are_accepted(harness: Harness) -> None:

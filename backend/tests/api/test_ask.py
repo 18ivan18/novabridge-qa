@@ -67,11 +67,13 @@ def test_relevance_gate_answers_without_the_llm(
 def test_filters_and_top_k_reach_the_retriever(
     make_client: ClientFactory, retriever: StubRetriever
 ) -> None:
-    payload = {**QUESTION, "filters": {"tickers": ["ACME"], "doc_types": ["10-K"]}, "top_k": 2}
+    filters = {"tickers": ["ACME"], "doc_types": ["10-K"], "sources": ["upload"]}
+    payload = {**QUESTION, "filters": filters, "top_k": 2}
 
     make_client("Anvils [1].").post("/api/ask", json=payload)
 
-    assert retriever.calls == [(2, SearchFilters(tickers=("ACME",), doc_types=("10-K",)))]
+    expected = SearchFilters(tickers=("ACME",), doc_types=("10-K",), sources=("upload",))
+    assert retriever.calls == [(2, expected)]
 
 
 def test_filters_are_optional(make_client: ClientFactory, retriever: StubRetriever) -> None:

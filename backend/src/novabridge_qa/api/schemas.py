@@ -24,6 +24,7 @@ class ErrorResponse(BaseModel):
 class AskFilters(BaseModel):
     tickers: list[str] = []
     doc_types: list[DocType] = []
+    sources: list[DocSource] = []
 
 
 class AskRequest(BaseModel):

@@ -89,7 +89,7 @@ The brief explicitly says: *"This task tests your judgment and ability to verify
 
 **Frontend (`frontend/package.json`)**
 - `react`, `react-dom`, `vite`, `typescript`, `@vitejs/plugin-react`
-- UI: `shadcn/ui` (with what it requires: `tailwindcss`, Radix primitives, `class-variance-authority`, `clsx`, `tailwind-merge`, `lucide-react`)
+- UI: `shadcn/ui` (with what it requires: `tailwindcss`, Radix primitives, `class-variance-authority`, `cn`, `lucide-react`)
 - Server state: `@tanstack/react-query`
 - Dev: `eslint` (+ TS plugin), `vitest`, `@testing-library/react`, `jsdom`
 - No axios (use `fetch` with a small typed client, called from TanStack Query). No other state library.
@@ -185,7 +185,7 @@ Pure, heavily unit-tested function:
 
 `POST /api/ask` request:
 ```json
-{ "question": "string (3–1000 chars)", "filters": { "tickers": ["AAPL"], "doc_types": ["10-K"] }, "top_k": 6 }
+{ "question": "string (3–1000 chars)", "filters": { "tickers": ["AAPL"], "doc_types": ["10-K"], "sources": ["upload"] }, "top_k": 6 }
 ```
 Response:
 ```json
@@ -413,13 +413,13 @@ lock, dedup by `doc_id`, size/type validation, a clear error for files with no t
 ✅ API tests for success, duplicate, too large, unsupported type and no-text file; a manual upload of a real TXT
 file answers a question about it.
 
-**M8b — HTML and PDF loaders (gradual, one commit each)**
+**M8b — HTML and PDF loaders (gradual, one commit each)** — *moved by Ivan to the end, after M11, with M8c*
 First HTML (BeautifulSoup with scripts/styles/hidden XBRL removed), then PDF (pypdf with page numbers). Add each
 to ingestion and to the upload's accepted types. Ingest the current HTML 10-Ks and re-run the eval on them.
 ✅ Loader unit tests with synthetic fixtures; an API test for a no-text PDF (`422`); a real file of each format
 answers a question.
 
-**M8c — Embedder comparison**
+**M8c — Embedder comparison** — *moved by Ivan to the end, after M8b*
 Compare fastembed, Qwen3-0.6B and harrier-0.6b with `run_eval.py`, using a separate index per model. Retune
 `MIN_RELEVANCE` for the winner.
 ✅ Comparison table added to `eval/results.md`; D4 updated with the final choice.

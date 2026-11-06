@@ -50,7 +50,9 @@ def _to_filters(request: AskRequest) -> SearchFilters | None:
     if request.filters is None:
         return None
     return SearchFilters(
-        tickers=tuple(request.filters.tickers), doc_types=tuple(request.filters.doc_types)
+        tickers=tuple(request.filters.tickers),
+        doc_types=tuple(request.filters.doc_types),
+        sources=tuple(request.filters.sources),
     )
 
 

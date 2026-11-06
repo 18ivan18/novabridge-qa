@@ -35,6 +35,7 @@ class SearchFilters:
 
     tickers: tuple[str, ...] = ()
     doc_types: tuple[str, ...] = ()
+    sources: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
