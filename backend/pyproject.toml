@@ -7,6 +7,8 @@ dependencies = [
     "fastapi>=0.162.0",
     "pydantic>=2",
     "pydantic-settings>=2.16.2",
+    "sentence-transformers>=6.2.0",
+    "torch>=2.15.0",
     "uvicorn[standard]>=0.54.0",
 ]
 
@@ -17,6 +19,7 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
+    "httpx2>=2.16.0",
     "mypy>=2.4.1",
     "pytest>=9.2.0",
     "ruff>=0.17.4",
@@ -42,3 +45,12 @@ testpaths = ["tests"]
 pythonpath = ["scripts"]
 # importlib mode lets tests/unit and tests/api hold same-named files without __init__.py packages.
 addopts = "--import-mode=importlib"
+
+# PyPI's Linux torch wheels bundle CUDA (gigabytes). This project embeds on CPU, so use the CPU index.
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
