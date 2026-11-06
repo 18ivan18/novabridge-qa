@@ -52,8 +52,8 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# scripts/ and eval/ are not packages, so make them importable for tests.
-pythonpath = ["scripts", "eval"]
+# These are not packages, so make them importable for tests.
+pythonpath = ["scripts", "eval", "tests/api"]
 # importlib mode lets tests/unit and tests/api hold same-named files without __init__.py packages.
 addopts = "--import-mode=importlib"
 

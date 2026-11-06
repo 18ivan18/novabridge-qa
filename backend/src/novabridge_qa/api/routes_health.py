@@ -8,7 +8,7 @@ from novabridge_qa.api.schemas import HealthResponse
 router = APIRouter(tags=["health"])
 
 
-@router.get("/health")
+@router.get("/health", summary="Check the service and count what is indexed")
 def health(container: ContainerDep) -> HealthResponse:
     return HealthResponse(
         status="ok",

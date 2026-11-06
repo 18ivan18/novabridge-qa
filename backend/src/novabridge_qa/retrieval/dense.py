@@ -1,5 +1,6 @@
 """Chroma wrapper. Chroma is the single source of truth for chunks and their metadata."""
 
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -178,6 +179,19 @@ class DenseIndex:
     def count_chunks(self) -> int:
         return self._collection.count()
 
+    def documents(self) -> list[tuple[Document, int]]:
+        """List each document with its chunk count, by title."""
+        result = self._collection.get(include=["metadatas"])
+        found: dict[str, Document] = {}
+        counts: Counter[str] = Counter()
+        for chunk_id, metadata in zip(result["ids"], result["metadatas"] or [], strict=True):
+            _, document = _from_metadata(chunk_id, "", metadata)
+            found[document.doc_id] = document
+            counts[document.doc_id] += 1
+        return [
+            (document, counts[doc_id])
+            for doc_id, document in sorted(found.items(), key=lambda item: item[1].title)
+        ]
+
     def count_documents(self) -> int:
-        metadatas = self._collection.get(include=["metadatas"])["metadatas"] or []
-        return len({metadata["doc_id"] for metadata in metadatas})
+        return len(self.documents())

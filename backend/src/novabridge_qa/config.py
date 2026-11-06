@@ -46,6 +46,8 @@ class Settings(BaseSettings):
 
     sec_user_agent: str = ""
 
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def split_comma_separated(cls, value: object) -> object:

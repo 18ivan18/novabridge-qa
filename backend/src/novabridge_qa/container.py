@@ -60,9 +60,11 @@ def build_retriever(settings: Settings, embedder: Embedder, dense: DenseIndex) -
 
 
 def build_qa_service(settings: Settings, dense: DenseIndex) -> QAService:
+    # The LLM comes first: a missing setting should fail before the embedder loads.
+    llm = build_llm(settings)
     return QAService(
         build_retriever(settings, build_embedder(settings), dense),
-        build_llm(settings),
+        llm,
         top_k=settings.top_k,
         min_relevance=settings.min_relevance,
         max_tokens=settings.llm_max_tokens,

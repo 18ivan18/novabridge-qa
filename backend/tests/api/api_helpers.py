@@ -1,0 +1,40 @@
+"""Shared by the API tests. Fixtures live in conftest.py, which importlib mode cannot import."""
+
+from collections.abc import Callable
+from datetime import UTC, date, datetime
+
+from fastapi.testclient import TestClient
+
+from novabridge_qa.domain.models import Chunk, Document, ScoredPassage, SearchFilters
+
+DOCUMENT = Document(
+    title="ACME Corp · Form 10-K",
+    company="ACME Corp",
+    ticker="ACME",
+    doc_type="10-K",
+    period_end=date(2025, 9, 27),
+    source="edgar",
+    filename="acme.txt",
+    doc_id="doc",
+    ingested_at=datetime(2025, 11, 1, tzinfo=UTC),
+)
+
+
+def make_passage(number: int, similarity: float = 0.9) -> ScoredPassage:
+    chunk = Chunk(f"doc:{number}", "doc", f"Anvil fact {number}.", "Item 1 — Business", None, 0, 1)
+    return ScoredPassage(chunk, DOCUMENT, number, number + 1, 0.0323, similarity)
+
+
+class StubRetriever:
+    def __init__(self, passages: list[ScoredPassage]) -> None:
+        self.passages = passages
+        self.calls: list[tuple[int, SearchFilters | None]] = []
+
+    def search(
+        self, query: str, k: int, filters: SearchFilters | None = None
+    ) -> list[ScoredPassage]:
+        self.calls.append((k, filters))
+        return self.passages[:k]
+
+
+ClientFactory = Callable[..., TestClient]
