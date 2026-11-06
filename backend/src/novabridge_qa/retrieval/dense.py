@@ -193,5 +193,8 @@ class DenseIndex:
             for doc_id, document in sorted(found.items(), key=lambda item: item[1].title)
         ]
 
+    def count_document_chunks(self, doc_id: str) -> int:
+        return len(self._collection.get(where={"doc_id": doc_id}, include=[])["ids"])
+
     def count_documents(self) -> int:
         return len(self.documents())

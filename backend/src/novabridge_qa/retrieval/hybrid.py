@@ -33,6 +33,10 @@ class HybridRetriever:
         self._candidates = candidates
         self._rrf_k = rrf_k
 
+    def replace_sparse(self, sparse: SparseIndex) -> None:
+        """Swap in a rebuilt BM25 index. A search already running keeps the one it started with."""
+        self._sparse = sparse
+
     def search(
         self,
         query: str,

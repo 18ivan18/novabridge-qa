@@ -36,7 +36,12 @@ def test_docs_are_served_under_api(app: FastAPI) -> None:
 def test_openapi_lists_the_routes_and_the_502(app: FastAPI) -> None:
     schema = TestClient(app).get("/api/openapi.json").json()
 
-    assert set(schema["paths"]) == {"/api/health", "/api/ask", "/api/documents"}
+    assert set(schema["paths"]) == {
+        "/api/health",
+        "/api/ask",
+        "/api/documents",
+        "/api/jobs/{job_id}",
+    }
     assert "502" in schema["paths"]["/api/ask"]["post"]["responses"]
 
 

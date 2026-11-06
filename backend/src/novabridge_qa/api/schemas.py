@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from novabridge_qa.domain.models import DocSource, DocType
+from novabridge_qa.ingestion.jobs import JobStatus
 
 
 class HealthResponse(BaseModel):
@@ -81,3 +82,15 @@ class DocumentResponse(BaseModel):
     filename: str
     ingested_at: datetime
     chunks: int
+
+
+class UploadResponse(BaseModel):
+    job_id: str
+    doc_id: str
+
+
+class JobResponse(BaseModel):
+    status: JobStatus
+    progress: int = Field(ge=0, le=100)
+    error: str | None
+    chunks: int | None

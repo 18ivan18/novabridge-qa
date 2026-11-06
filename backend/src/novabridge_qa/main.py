@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 
 from novabridge_qa.api import routes_ask, routes_documents, routes_health
 from novabridge_qa.config import Settings
-from novabridge_qa.container import Container, build_container, build_qa_service
+from novabridge_qa.container import Container, build_container, build_services
 from novabridge_qa.llm.base import LLMError
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """
     container: Container = app.state.container
     logging.basicConfig(level=container.settings.log_level)
-    app.state.qa_service = build_qa_service(container.settings, container.dense_index)
+    services = build_services(container.settings, container.dense_index)
+    app.state.qa_service = services.qa
+    app.state.upload_service = services.uploads
     yield
 
 

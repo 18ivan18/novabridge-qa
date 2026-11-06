@@ -21,6 +21,10 @@ class UnsupportedFormatError(ValueError):
     """The file type has no loader."""
 
 
+class NoTextError(ValueError):
+    """The file loaded but holds no text."""
+
+
 @dataclass(frozen=True)
 class PageSpan:
     """Where a page starts and ends in the loaded text. Only PDFs will have these."""

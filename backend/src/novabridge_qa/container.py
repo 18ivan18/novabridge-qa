@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 from novabridge_qa.config import Settings
+from novabridge_qa.ingestion.uploads import UploadService
 from novabridge_qa.llm.factory import build_llm
 from novabridge_qa.qa.service import QAService
 from novabridge_qa.retrieval.dense import DenseIndex
@@ -19,6 +20,14 @@ from novabridge_qa.retrieval.sparse import SparseIndex
 class Container:
     settings: Settings
     dense_index: DenseIndex
+
+
+@dataclass(frozen=True)
+class Services:
+    """The objects that need the embedding model and the LLM, built once a server starts."""
+
+    qa: QAService
+    uploads: UploadService
 
 
 def build_embedder(settings: Settings) -> Embedder:
@@ -59,15 +68,32 @@ def build_retriever(settings: Settings, embedder: Embedder, dense: DenseIndex) -
     )
 
 
-def build_qa_service(settings: Settings, dense: DenseIndex) -> QAService:
+def build_services(settings: Settings, dense: DenseIndex) -> Services:
     # The LLM comes first: a missing setting should fail before the embedder loads.
     llm = build_llm(settings)
-    return QAService(
-        build_retriever(settings, build_embedder(settings), dense),
-        llm,
-        top_k=settings.top_k,
-        min_relevance=settings.min_relevance,
-        max_tokens=settings.llm_max_tokens,
+    embedder = build_embedder(settings)
+    retriever = build_retriever(settings, embedder, dense)
+
+    def refresh_sparse() -> None:
+        retriever.replace_sparse(rebuild_sparse_index(settings, dense))
+
+    return Services(
+        qa=QAService(
+            retriever,
+            llm,
+            top_k=settings.top_k,
+            min_relevance=settings.min_relevance,
+            max_tokens=settings.llm_max_tokens,
+        ),
+        uploads=UploadService(
+            embedder,
+            dense,
+            refresh_sparse,
+            uploads_dir=settings.data_dir / "uploads",
+            max_bytes=settings.max_upload_mb * 1024 * 1024,
+            chunk_tokens=settings.chunk_tokens,
+            chunk_overlap=settings.chunk_overlap,
+        ),
     )
 
 

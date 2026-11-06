@@ -7,7 +7,7 @@ from pathlib import Path
 
 from novabridge_qa.domain.models import Chunk, Document, DocumentMeta, indexed_text
 from novabridge_qa.ingestion.chunking import TokenCounter, chunk_document
-from novabridge_qa.ingestion.loaders import load_file
+from novabridge_qa.ingestion.loaders import LoadedDocument, load_file
 from novabridge_qa.ingestion.sections import detect_sections
 from novabridge_qa.retrieval.dense import DenseIndex
 from novabridge_qa.retrieval.embedder import Embedder
@@ -20,6 +20,24 @@ class IngestResult:
     skipped: bool
 
 
+def chunk_loaded(
+    loaded: LoadedDocument,
+    doc_id: str,
+    counter: TokenCounter,
+    *,
+    chunk_tokens: int,
+    chunk_overlap: int,
+) -> list[Chunk]:
+    return chunk_document(
+        doc_id,
+        loaded.text,
+        detect_sections(loaded.text),
+        counter,
+        chunk_tokens=chunk_tokens,
+        chunk_overlap=chunk_overlap,
+    )
+
+
 def chunk_file(
     path: Path,
     doc_id: str,
@@ -28,14 +46,8 @@ def chunk_file(
     chunk_tokens: int,
     chunk_overlap: int,
 ) -> list[Chunk]:
-    text = load_file(path).text
-    return chunk_document(
-        doc_id,
-        text,
-        detect_sections(text),
-        counter,
-        chunk_tokens=chunk_tokens,
-        chunk_overlap=chunk_overlap,
+    return chunk_loaded(
+        load_file(path), doc_id, counter, chunk_tokens=chunk_tokens, chunk_overlap=chunk_overlap
     )
 
 
