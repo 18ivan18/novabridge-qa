@@ -69,8 +69,8 @@ The brief explicitly says: *"This task tests your judgment and ability to verify
 | D7 | **Citations checked on the server** | Passages are numbered `[1]..[k]` in the prompt; the model must cite `[n]`. The server parses citations, drops numbers that don't exist, renumbers the rest in order of first appearance, and returns only cited passages as `sources`. Zero valid citations → treated as insufficient evidence. |
 | D8 | **"Not enough evidence" path** has two layers | (a) Retrieval gate: if the best dense cosine similarity < `MIN_RELEVANCE` (tuned on the eval set), the LLM is not called. (b) The model is told to reply exactly `INSUFFICIENT_EVIDENCE` if the passages don't answer the question. Either case returns `insufficient_evidence: true`. |
 | D9 | **Corpus: SEC EDGAR 10-K filings** for Apple, Microsoft and NVIDIA (latest annual report each) | Real, relevant, and US government filings are public domain, so they can be committed. EDGAR requires a descriptive `User-Agent` with contact info: read it from `SEC_USER_AGENT` in `.env`, never hard-code it. |
-| D10 | **Document upload** from the UI | `POST /api/documents` (multipart). Indexing runs as a background job; the UI polls job status. Supported: PDF (text layer only, **no OCR**), HTML, TXT, Markdown. Max 20 MB. |
-| D11 | **Frontend: Vite + React + TypeScript**, no UI component library | Matches the designs in `docs/design/`; plain CSS with design tokens. Few dependencies, easy to read. |
+| D10 | **Document upload** from the UI | `POST /api/documents` (multipart). Indexing runs as a background job; the UI polls job status. Formats arrive gradually: **TXT and Markdown first** (M2, M8), then HTML, then PDF (text layer only, **no OCR**) in M8b. Max 20 MB. |
+| D11 | **Frontend: Vite + React + TypeScript, shadcn/ui, TanStack Query** | shadcn/ui components are copied into the repo, so they stay readable and restylable to match `docs/design/` through the design tokens. TanStack Query handles request state and job polling, replacing hand-written loading/error/polling code. Trade-off: Tailwind and Radix become dependencies. |
 | D12 | **Python 3.12, uv, ruff, mypy, pytest** | Modern standard tooling; `uv.lock` makes installs reproducible. |
 | D13 | **Docker Compose**: `api` (FastAPI/uvicorn) + `web` (nginx serving the Vite build and proxying `/api`) | One command to run. Optional `ollama` service behind a compose profile for a fully local LLM. |
 
@@ -89,8 +89,10 @@ The brief explicitly says: *"This task tests your judgment and ability to verify
 
 **Frontend (`frontend/package.json`)**
 - `react`, `react-dom`, `vite`, `typescript`, `@vitejs/plugin-react`
+- UI: `shadcn/ui` (with what it requires: `tailwindcss`, Radix primitives, `class-variance-authority`, `clsx`, `tailwind-merge`, `lucide-react`)
+- Server state: `@tanstack/react-query`
 - Dev: `eslint` (+ TS plugin), `vitest`, `@testing-library/react`, `jsdom`
-- No axios (use `fetch` with a small typed client), no state library, no UI kit.
+- No axios (use `fetch` with a small typed client, called from TanStack Query). No other state library.
 
 ---
 
@@ -320,8 +322,9 @@ novabridge-qa/
         ├── main.tsx
         ├── App.tsx
         ├── api/{client.ts,types.ts}   # types mirror backend schemas
-        ├── styles/{tokens.css,global.css}
+        ├── styles/{tokens.css,global.css}   # tokens feed the shadcn/Tailwind theme variables
         └── components/
+            ├── ui/                    # generated shadcn/ui components
             ├── AppShell.tsx
             ├── DocumentLibrary.tsx
             ├── AskForm.tsx
@@ -364,9 +367,9 @@ Each milestone ends with: checks passing, a short summary to Ivan, and his appro
 rate-limit politely), saves the primary HTML document and writes `data/raw/manifest.json` with metadata.
 ✅ Files committed; manifest lists company, ticker, form, period end, filing date and source URL.
 
-**M2 — Loading, sections, chunking**
-`loaders.py` (HTML via BeautifulSoup with scripts/styles/hidden XBRL removed; PDF via pypdf with page numbers;
-TXT/MD), `sections.py`, `chunking.py`, all unit-tested with synthetic fixtures.
+**M2 — Loading, sections, chunking (TXT first)**
+`loaders.py` for TXT/MD only, `sections.py`, `chunking.py`, all unit-tested with synthetic fixtures. HTML and PDF
+loaders come later (M8b); keep the loader interface ready for them.
 ✅ Running the pipeline on the three filings prints a stats table (chunks per doc and section, token distribution);
 Ivan spot-checks 5 random chunks.
 
@@ -405,8 +408,14 @@ lock, dedup by `doc_id`, size/type validation, a clear error for PDFs with no te
 ✅ API tests for success, duplicate, too large, unsupported type and no-text PDF; a manual upload of a real PDF
 answers a question about it.
 
+**M8b — HTML and PDF loaders (gradual, one commit each)**
+First HTML (BeautifulSoup with scripts/styles/hidden XBRL removed), then PDF (pypdf with page numbers). Add each
+to ingestion and to the upload's accepted types.
+✅ Loader unit tests with synthetic fixtures; a real file of each format answers a question.
+
 **M9 — Frontend**
-Vite + React + TS app implementing the four designs: library sidebar, ask form with company filter, example
+Vite + React + TS app with shadcn/ui and TanStack Query (mutations for ask and upload, `refetchInterval` for job
+polling), implementing the four designs: library sidebar, ask form with company filter, example
 questions, answer with citation chips that scroll to and highlight the source card, "retrieved but not cited"
 list, retrieval details toggle, no-evidence card, upload dialog with queue and polling, error states.
 ✅ `npm run lint && npm run typecheck && npm test` pass (tests at least for `AnswerCard` citation rendering and
@@ -419,10 +428,12 @@ healthchecks, a `data` volume, an ingest-on-first-start step, and an optional `o
 ✅ On a clean clone: `cp .env.example .env`, set a key, `docker compose up --build`, open
 `http://localhost:8080`, ask a question, get a cited answer.
 
-**M11 — README, logs, final pass**
-Write the README (section 11), export every AI conversation into `ai-logs/` with an index, delete dead code,
+**M11 — README, Swagger docs, logs, final pass**
+Finish the Swagger/OpenAPI documentation: summaries, descriptions, request/response examples and documented error
+responses on every route. Serve it at `/api/docs` (not FastAPI's default `/docs`) so it works through the nginx
+`/api` proxy. Write the README (section 11), export every AI conversation into `ai-logs/` with an index, delete dead code,
 make sure no secrets are committed, and do one final clean-clone run.
-✅ Ivan reviews the README and the whole diff.
+✅ `/api/docs` is complete and works through nginx; Ivan reviews the README and the whole diff.
 
 **Stretch (only after M11, and only if Ivan asks):** streaming answers (SSE), delete document, a cross-encoder
 re-ranker, LLM-as-judge faithfulness eval, filters by period.
