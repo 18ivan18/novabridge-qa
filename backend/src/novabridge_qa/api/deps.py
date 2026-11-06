@@ -4,12 +4,12 @@ from typing import Annotated, cast
 
 from fastapi import Depends, Request
 
-from novabridge_qa.config import Settings
+from novabridge_qa.container import Container
 
 
-def get_settings(request: Request) -> Settings:
+def get_container(request: Request) -> Container:
     # app.state is untyped; create_app() is the only writer, so this cast is safe.
-    return cast(Settings, request.app.state.settings)
+    return cast(Container, request.app.state.container)
 
 
-SettingsDep = Annotated[Settings, Depends(get_settings)]
+ContainerDep = Annotated[Container, Depends(get_container)]

@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "NovaBridge financial analyst Q&A assistant: grounded answers with verifiable citations."
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "chromadb>=1.5.9",
     "fastapi>=0.162.0",
     "pydantic>=2",
     "pydantic-settings>=2.16.2",

@@ -2,19 +2,18 @@
 
 from fastapi import APIRouter
 
-from novabridge_qa.api.deps import SettingsDep
+from novabridge_qa.api.deps import ContainerDep
 from novabridge_qa.api.schemas import HealthResponse
 
 router = APIRouter(tags=["health"])
 
 
 @router.get("/health")
-def health(settings: SettingsDep) -> HealthResponse:
-    # documents and chunks stay 0 until the index exists (M3), when they will read from Chroma.
+def health(container: ContainerDep) -> HealthResponse:
     return HealthResponse(
         status="ok",
-        llm_provider=settings.llm_provider,
-        embedder=settings.embedding_model,
-        documents=0,
-        chunks=0,
+        llm_provider=container.settings.llm_provider,
+        embedder=container.settings.embedding_model,
+        documents=container.dense_index.count_documents(),
+        chunks=container.dense_index.count_chunks(),
     )

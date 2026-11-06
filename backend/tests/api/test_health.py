@@ -1,13 +1,21 @@
+from datetime import UTC, datetime
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from novabridge_qa.config import Settings
+from novabridge_qa.container import Container
+from novabridge_qa.domain.models import Chunk, Document
 from novabridge_qa.main import create_app
+from novabridge_qa.retrieval.embedder import FakeEmbedder
 
 
-def test_health_reports_configuration() -> None:
-    client = TestClient(create_app(Settings(_env_file=None)))
+def make_client(tmp_path: Path) -> TestClient:
+    return TestClient(create_app(Settings(_env_file=None, data_dir=tmp_path)))
 
-    response = client.get("/api/health")
+
+def test_health_reports_configuration(tmp_path: Path) -> None:
+    response = make_client(tmp_path).get("/api/health")
 
     assert response.status_code == 200
     assert response.json() == {
@@ -17,3 +25,26 @@ def test_health_reports_configuration() -> None:
         "documents": 0,
         "chunks": 0,
     }
+
+
+def test_health_counts_what_is_indexed(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    container: Container = client.app.state.container  # type: ignore[attr-defined]
+    document = Document(
+        title="ACME Corp · Form 10-K",
+        company="ACME Corp",
+        ticker="ACME",
+        doc_type="10-K",
+        period_end=None,
+        source="upload",
+        filename="acme.txt",
+        doc_id="doc",
+        ingested_at=datetime.now(UTC),
+    )
+    chunks = [Chunk(f"doc:{i}", "doc", "anvils", None, None, 0, 6) for i in range(2)]
+    container.dense_index.add(document, chunks, FakeEmbedder().embed_documents(["a", "b"]))
+
+    body = client.get("/api/health").json()
+
+    assert body["documents"] == 1
+    assert body["chunks"] == 2
