@@ -44,6 +44,37 @@ def test_ignores_other_forms_and_amendments() -> None:
     assert filing.filing_date == "2025-01-01"
 
 
+def test_plain_text_search_reaches_older_blocks_and_skips_html() -> None:
+    data = submissions([("10-K", "2025-01-01")])
+    older = {
+        "form": ["10-K405", "10-K", "10-K"],
+        "filingDate": ["2001-04-27", "2000-01-01", "2002-01-01"],
+        "reportDate": ["2001-01-28", "1999-12-31", "2001-12-31"],
+        "accessionNumber": ["1", "2", "3"],
+        "primaryDocument": ["new.txt", "old.txt", "html-era.htm"],
+    }
+
+    filing = find_latest_filing(
+        data,
+        "ACME",
+        "1",
+        forms=("10-K", "10-K405"),
+        suffix=".txt",
+        older_blocks=[older],
+    )
+
+    assert filing.primary_document == "new.txt"
+    assert filing.form == "10-K405"
+
+
+def test_filings_without_a_primary_document_are_skipped() -> None:
+    data = submissions([("10-K", "2025-01-01")])
+    data["filings"]["recent"]["primaryDocument"] = [""]
+
+    with pytest.raises(ValueError, match="No 10-K"):
+        find_latest_filing(data, "ACME", "1")
+
+
 def test_fails_when_there_is_no_10k() -> None:
     with pytest.raises(ValueError, match="No 10-K"):
         find_latest_filing(submissions([("8-K", "2025-01-01")]), "ACME", "1")

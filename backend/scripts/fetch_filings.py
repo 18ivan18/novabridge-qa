@@ -1,4 +1,8 @@
-"""Download the latest 10-K for each company from SEC EDGAR into data/raw/.
+"""Download annual reports for each company from SEC EDGAR into data/raw/.
+
+Each company gets its latest 10-K (HTML) and its newest plain-text annual report. EDGAR stopped
+receiving plain-text filings around 2001, so the text files are old, but they are real filings
+that need no conversion, which makes them the corpus for the first TXT-only runs.
 
 Run from backend/: uv run python scripts/fetch_filings.py
 """
@@ -7,6 +11,7 @@ import hashlib
 import json
 import sys
 import time
+from collections.abc import Iterable, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -21,7 +26,8 @@ COMPANIES = {
     "MSFT": "0000789019",
     "NVDA": "0001045810",
 }
-FORM = "10-K"
+# 10-K405 was a 10-K variant, discontinued in 2003. NVIDIA's plain-text filing uses it.
+PLAIN_TEXT_FORMS = ("10-K", "10-K405")
 # EDGAR allows 10 requests per second; stay well under that.
 SECONDS_BETWEEN_REQUESTS = 0.2
 
@@ -52,30 +58,44 @@ class Filing:
         return f"{self.ticker}-{self.form}-{self.period_end}{suffix}"
 
 
-def find_latest_filing(submissions: dict[str, Any], ticker: str, cik: str) -> Filing:
-    """Pick the newest original 10-K from an EDGAR submissions response.
+def find_latest_filing(
+    submissions: dict[str, Any],
+    ticker: str,
+    cik: str,
+    *,
+    forms: Sequence[str] = ("10-K",),
+    suffix: str = ".htm",
+    older_blocks: Iterable[dict[str, Any]] = (),
+) -> Filing:
+    """Pick the newest matching filing from an EDGAR submissions response.
 
     The exact form match excludes amendments (10-K/A), which are often partial documents.
+    `older_blocks` are the extra files EDGAR splits long filing histories into.
     """
     if ticker not in submissions["tickers"]:
         raise ValueError(f"CIK {cik} belongs to {submissions['tickers']}, not {ticker}")
 
-    recent = submissions["filings"]["recent"]
-    indexes = [i for i, form in enumerate(recent["form"]) if form == FORM]
-    if not indexes:
-        raise ValueError(f"No {FORM} in the recent filings of {ticker}")
+    blocks = [submissions["filings"]["recent"], *older_blocks]
+    candidates = [
+        (block, i)
+        for block in blocks
+        for i, form in enumerate(block["form"])
+        if form in forms and block["primaryDocument"][i].endswith(suffix)
+    ]
+    if not candidates:
+        raise ValueError(f"No {' or '.join(forms)} with a {suffix} document for {ticker}")
 
     # ISO dates sort correctly as strings.
-    latest = max(indexes, key=lambda i: recent["filingDate"][i])
+    block, latest = max(candidates, key=lambda c: c[0]["filingDate"][c[1]])
     return Filing(
         company=submissions["name"],
         ticker=ticker,
         cik=cik,
-        form=FORM,
-        period_end=recent["reportDate"][latest],
-        filing_date=recent["filingDate"][latest],
-        accession_number=recent["accessionNumber"][latest],
-        primary_document=recent["primaryDocument"][latest],
+        form=block["form"][latest],
+        period_end=block["reportDate"][latest],
+        filing_date=block["filingDate"][latest],
+        accession_number=block["accessionNumber"][latest],
+        primary_document=block["primaryDocument"][latest],
     )
 
 
@@ -108,11 +128,26 @@ def main() -> None:
     with httpx.Client(headers=headers, timeout=60) as client:
         for ticker, cik in COMPANIES.items():
             submissions = fetch(client, f"https://data.sec.gov/submissions/CIK{cik}.json").json()
-            filing = find_latest_filing(submissions, ticker, cik)
-            content = fetch(client, filing.source_url).content
-            (raw_dir / filing.filename).write_bytes(content)
-            entries.append(manifest_entry(filing, content))
-            print(f"{filing.filename}: {len(content):,} bytes, filed {filing.filing_date}")
+            older_blocks = [
+                fetch(client, f"https://data.sec.gov/submissions/{file['name']}").json()
+                for file in submissions["filings"]["files"]
+            ]
+            filings = [
+                find_latest_filing(submissions, ticker, cik),
+                find_latest_filing(
+                    submissions,
+                    ticker,
+                    cik,
+                    forms=PLAIN_TEXT_FORMS,
+                    suffix=".txt",
+                    older_blocks=older_blocks,
+                ),
+            ]
+            for filing in filings:
+                content = fetch(client, filing.source_url).content
+                (raw_dir / filing.filename).write_bytes(content)
+                entries.append(manifest_entry(filing, content))
+                print(f"{filing.filename}: {len(content):,} bytes, filed {filing.filing_date}")
 
     manifest = json.dumps(entries, indent=2) + "\n"
     (raw_dir / "manifest.json").write_text(manifest)

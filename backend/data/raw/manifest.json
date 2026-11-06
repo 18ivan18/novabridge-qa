@@ -13,6 +13,19 @@
     "sha256": "ca788ce9980f1bb9933f7d065b7bd5a09114cecceea1ff6f085fc3e1462568e0"
   },
   {
+    "company": "Apple Inc.",
+    "ticker": "AAPL",
+    "cik": "0000320193",
+    "form": "10-K",
+    "period_end": "2000-09-30",
+    "filing_date": "2000-12-14",
+    "accession_number": "0000912057-00-053623",
+    "primary_document": "a2032880z10-k.txt",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/320193/000091205700053623/a2032880z10-k.txt",
+    "filename": "AAPL-10-K-2000-09-30.txt",
+    "sha256": "ed4f884d4ca78c082309ed66a9c0489f0b3543b7e96f797b363c74956896c8a7"
+  },
+  {
     "company": "MICROSOFT CORP",
     "ticker": "MSFT",
     "cik": "0000789019",
@@ -26,6 +39,19 @@
     "sha256": "fb187c7e00cac81ea66b63be5ec25a745aaef9bc36d3d1cf6c03162356854e85"
   },
   {
+    "company": "MICROSOFT CORP",
+    "ticker": "MSFT",
+    "cik": "0000789019",
+    "form": "10-K",
+    "period_end": "2001-06-30",
+    "filing_date": "2001-09-18",
+    "accession_number": "0001032210-01-501099",
+    "primary_document": "d10k.txt",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/789019/000103221001501099/d10k.txt",
+    "filename": "MSFT-10-K-2001-06-30.txt",
+    "sha256": "48f57672fb310d3ea5736bda4067d701a34dff2d2d01cb82f477462500bf4be4"
+  },
+  {
     "company": "NVIDIA CORP",
     "ticker": "NVDA",
     "cik": "0001045810",
@@ -37,5 +63,18 @@
     "source_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/nvda-20260125.htm",
     "filename": "NVDA-10-K-2026-01-25.htm",
     "sha256": "5f16e34c2c3e8f9f8aa8ee4237226dd50d6b40f1b75bbcdee01573d3ae30bf8e"
+  },
+  {
+    "company": "NVIDIA CORP",
+    "ticker": "NVDA",
+    "cik": "0001045810",
+    "form": "10-K405",
+    "period_end": "2001-01-28",
+    "filing_date": "2001-04-27",
+    "accession_number": "0001012870-01-500492",
+    "primary_document": "d10k405.txt",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1045810/000101287001500492/d10k405.txt",
+    "filename": "NVDA-10-K405-2001-01-28.txt",
+    "sha256": "7b1fd907135fab107455efb8090cf301471c6b28908a496675288ccda970bae0"
   }
 ]
