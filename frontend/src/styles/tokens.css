@@ -1,0 +1,31 @@
+/* The palette from docs/design. shadcn/ui components read the same variables. */
+:root {
+  --background: #f5f4ef;
+  --foreground: #15171c;
+  --card: #ffffff;
+  --card-foreground: #15171c;
+  --popover: #ffffff;
+  --popover-foreground: #15171c;
+  --primary: #1e3a8a;
+  --primary-foreground: #ffffff;
+  --secondary: #eef0f4;
+  --secondary-foreground: #2a2f38;
+  --muted: #f7f6f2;
+  --muted-foreground: #555b66;
+  --accent: #f7f6f2;
+  --accent-foreground: #15171c;
+  --destructive: #8a2a1a;
+  --border: #e2e0d8;
+  --input: #c9c6bc;
+  --ring: #1e3a8a;
+  --radius: 0.5rem;
+
+  --chip: #e8ecf7;
+  --success-bg: #e3f1e7;
+  --success-fg: #1f5a33;
+  --warning-bg: #fbf1dc;
+  --warning-fg: #5c3800;
+  --error-bg: #fdf4f2;
+  --error-border: #ebc3ba;
+  --error-fg: #8a2a1a;
+}
