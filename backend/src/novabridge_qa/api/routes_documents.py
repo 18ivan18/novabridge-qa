@@ -4,7 +4,8 @@ from dataclasses import asdict
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile, status
+from fastapi import Path as PathParam
 from pydantic import StringConstraints
 
 from novabridge_qa.api.deps import ContainerDep, UploadServiceDep
@@ -23,7 +24,11 @@ router = APIRouter(tags=["documents"])
 Company = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 
 
-@router.get("/documents", summary="List the document library")
+@router.get(
+    "/documents",
+    summary="List the document library",
+    description="Returns every indexed document, in title order.",
+)
 def list_documents(container: ContainerDep) -> list[DocumentResponse]:
     return [
         DocumentResponse(**asdict(document), chunks=chunks)
@@ -35,19 +40,26 @@ def list_documents(container: ContainerDep) -> list[DocumentResponse]:
     "/documents",
     status_code=status.HTTP_202_ACCEPTED,
     summary="Upload a document",
-    description="Indexing runs in the background: poll the returned job for its progress.",
+    description=(
+        "Accepts one TXT or Markdown file. Indexing runs in the background: poll the returned job "
+        "for its progress. A file already in the library gets a job that is already `indexed`, "
+        "and its original tags are kept."
+    ),
     responses={
         413: {"model": ErrorResponse, "description": "The file is too large."},
         415: {"model": ErrorResponse, "description": "The file type is not supported."},
+        422: {"description": "A field is invalid, or the file has no text (`detail` is a string)."},
     },
 )
 def upload_document(
-    file: UploadFile,
-    company: Annotated[Company, Form()],
-    doc_type: Annotated[DocType, Form()],
+    file: Annotated[UploadFile, File(description="The document to index.")],
+    company: Annotated[Company, Form(description="The company the document is about.")],
+    doc_type: Annotated[DocType, Form(description="The kind of document.")],
     service: UploadServiceDep,
     background: BackgroundTasks,
-    period_end: Annotated[date | None, Form()] = None,
+    period_end: Annotated[
+        date | None, Form(description="The last day of the period it covers.")
+    ] = None,
 ) -> UploadResponse:
     try:
         job = service.accept(
@@ -70,9 +82,13 @@ def upload_document(
 @router.get(
     "/jobs/{job_id}",
     summary="Check an upload's progress",
+    description="Jobs live in memory, so a job from before a server restart returns 404.",
     responses={404: {"model": ErrorResponse, "description": "No such job."}},
 )
-def get_job(job_id: str, service: UploadServiceDep) -> JobResponse:
+def get_job(
+    job_id: Annotated[str, PathParam(description="The `job_id` from the upload.")],
+    service: UploadServiceDep,
+) -> JobResponse:
     job = service.job(job_id)
     if job is None:
         # Jobs live in memory, so this also covers a job from before a restart.

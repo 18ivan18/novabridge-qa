@@ -8,7 +8,11 @@ from novabridge_qa.api.schemas import HealthResponse
 router = APIRouter(tags=["health"])
 
 
-@router.get("/health", summary="Check the service and count what is indexed")
+@router.get(
+    "/health",
+    summary="Check the service and count what is indexed",
+    description="Answers once startup has finished, so it also serves as the Docker healthcheck.",
+)
 def health(container: ContainerDep) -> HealthResponse:
     return HealthResponse(
         status="ok",

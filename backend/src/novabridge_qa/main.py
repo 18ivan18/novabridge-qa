@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from novabridge_qa.api import routes_ask, routes_documents, routes_health
+from novabridge_qa.api.schemas import ErrorResponse
 from novabridge_qa.config import Settings
 from novabridge_qa.container import Container, build_container, build_services
 from novabridge_qa.llm.base import LLMError
@@ -61,7 +62,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings if settings is not None else Settings()
     app = FastAPI(
         title="NovaBridge Q&A API",
+        description=(
+            "Answers analysts' questions from indexed financial documents, with numbered "
+            "citations that are checked on the server."
+        ),
         version="0.1.0",
+        openapi_tags=[
+            {"name": "questions", "description": "Ask questions of the library."},
+            {"name": "documents", "description": "List the library and add to it."},
+            {"name": "health", "description": "Service status."},
+        ],
+        responses={500: {"model": ErrorResponse, "description": "An unexpected error."}},
         lifespan=lifespan,
         # Under /api because that is the only path nginx proxies to this service.
         docs_url="/api/docs",

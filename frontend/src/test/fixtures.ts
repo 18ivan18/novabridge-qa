@@ -1,4 +1,4 @@
-import type { AskResponse, LibraryDocument, Passage, Source } from "@/api/types";
+import type { AskResponse, Passage, Source } from "@/api/types";
 
 export function makePassage(number: number): Passage {
   return {
@@ -29,16 +29,3 @@ export function makeResponse(overrides: Partial<AskResponse> = {}): AskResponse 
     ...overrides,
   };
 }
-
-export const DOCUMENT: LibraryDocument = {
-  doc_id: "doc",
-  title: "ACME Corp · Form 10-K",
-  company: "ACME Corp",
-  ticker: "ACME",
-  doc_type: "10-K",
-  period_end: "2025-09-27",
-  source: "edgar",
-  filename: "acme.txt",
-  ingested_at: "2025-11-01T00:00:00Z",
-  chunks: 12,
-};

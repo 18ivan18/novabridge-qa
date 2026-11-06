@@ -61,6 +61,13 @@ def _to_filters(request: AskRequest) -> SearchFilters | None:
 @router.post(
     "/ask",
     summary="Ask a question",
+    description=(
+        "Retrieves passages with hybrid search and writes an answer from them. Citations such as "
+        "`[1]` are checked on the server: the number matches `id` in `sources`.\n\n"
+        "When the documents do not support an answer, this is still a 200: "
+        "`insufficient_evidence` is true, `answer` is empty and `retrieved` holds the closest "
+        "passages."
+    ),
     responses={502: {"model": ErrorResponse, "description": "The LLM provider failed."}},
 )
 def ask(request: AskRequest, service: QAServiceDep) -> AskResponse:

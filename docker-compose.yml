@@ -1,5 +1,4 @@
 x-backend: &backend
-  build: ./backend
   image: novabridge-qa-api
   env_file: .env
   environment:
@@ -13,10 +12,13 @@ services:
   # process at a time. Files already indexed are skipped, so later starts take a few seconds.
   ingest:
     <<: *backend
+    build: ./backend
     command: ["python", "scripts/ingest.py"]
 
   api:
     <<: *backend
+    # Uses the image that `ingest` builds. Building it in both would race on the same tag.
+    pull_policy: never
     depends_on:
       ingest:
         condition: service_completed_successfully

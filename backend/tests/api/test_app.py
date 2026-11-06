@@ -45,6 +45,22 @@ def test_openapi_lists_the_routes_and_the_502(app: FastAPI) -> None:
     assert "502" in schema["paths"]["/api/ask"]["post"]["responses"]
 
 
+def test_every_route_is_documented(app: FastAPI) -> None:
+    schema = TestClient(app).get("/api/openapi.json").json()
+
+    for path, operations in schema["paths"].items():
+        for method, operation in operations.items():
+            where = f"{method} {path}"
+            assert operation.get("summary"), where
+            assert operation.get("description"), where
+            assert "500" in operation["responses"], where
+
+    for name, model in schema["components"]["schemas"].items():
+        if name not in {"HTTPValidationError", "ValidationError"}:
+            for field, details in model.get("properties", {}).items():
+                assert "description" in details, f"{name}.{field}"
+
+
 def test_startup_fails_fast_without_an_llm_model(tmp_path: Path) -> None:
     app = create_app(Settings(_env_file=None, data_dir=tmp_path))
 
