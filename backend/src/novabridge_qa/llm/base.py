@@ -44,7 +44,7 @@ def timeout_error(provider: str) -> LLMError:
 
 
 def connection_error(provider: str) -> LLMError:
-    return LLMError(f"Could not reach {provider}.")
+    return LLMError(f"{provider} could not be reached.")
 
 
 def truncated_error(provider: str) -> LLMError:

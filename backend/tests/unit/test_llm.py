@@ -200,9 +200,13 @@ def test_timeouts_and_connection_errors_are_normalized() -> None:
     anthropic_request = httpx2.Request("POST", "http://llm.test")
     cases: list[tuple[Any, Exception, str]] = [
         (make_openai(), openai.APITimeoutError(openai_request), "did not respond"),
-        (make_openai(), openai.APIConnectionError(request=openai_request), "Could not reach"),
+        (make_openai(), openai.APIConnectionError(request=openai_request), "could not be reached"),
         (make_anthropic(), anthropic.APITimeoutError(anthropic_request), "did not respond"),
-        (make_anthropic(), anthropic.APIConnectionError(request=anthropic_request), "Could not"),
+        (
+            make_anthropic(),
+            anthropic.APIConnectionError(request=anthropic_request),
+            "could not be reached",
+        ),
     ]
     for client, error, message in cases:
         fake_create(client, error)
