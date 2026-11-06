@@ -1,0 +1,21 @@
+# Secrets
+.env
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Generated data (raw filings in backend/data/raw/ are committed)
+backend/data/index/
+backend/data/uploads/
+
+# Frontend
+node_modules/
+dist/
+
+# OS
+.DS_Store

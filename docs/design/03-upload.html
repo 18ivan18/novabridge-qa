@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Analyst Q&amp;A — Upload documents</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#1E3A8A}a:hover{color:#152B66}
+</style>
+</head>
+<body>
+<div style="position: relative; min-height: 100vh; display: flex; flex-direction: column; background: #F5F4EF; color: #15171C; font-family: 'IBM Plex Sans', system-ui, sans-serif">
+<header style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 14px 24px; background: #FFFFFF; border-bottom: 1px solid #E2E0D8">
+<div style="display: flex; align-items: center; gap: 12px">
+<svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><rect x="1" y="1" width="26" height="26" rx="6" fill="#1E3A8A"></rect><path d="M8 19 L12.5 13 L16 16.5 L20 9" stroke="#FFFFFF" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+<div style="display: flex; align-items: baseline; gap: 8px"><span style="font-size: 16px; font-weight: 700">NovaBridge</span><span style="font-size: 14px; color: #555B66">Analyst Q&amp;A</span></div>
+</div>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #555B66">
+<span style="font-family: 'IBM Plex Mono', monospace; padding: 4px 8px; border: 1px solid #E2E0D8; border-radius: 6px">LLM · anthropic</span>
+<span style="padding: 4px 8px; border: 1px solid #E2E0D8; border-radius: 6px">Internal prototype</span>
+</div>
+</header>
+<div style="display: flex; flex-wrap: wrap; flex: 1 1 auto; align-items: stretch">
+<aside aria-label="Document library" style="flex: 1 1 260px; box-sizing: border-box; padding: 20px; background: #FFFFFF; border-right: 1px solid #E2E0D8; display: flex; flex-direction: column; gap: 16px">
+<h2 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #555B66">Document library</h2>
+<span style="display: flex; align-items: center; justify-content: center; min-height: 44px; border: 1px solid #1E3A8A; border-radius: 8px; color: #1E3A8A; font-size: 14px; font-weight: 600">Upload document</span>
+<ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px">
+
+<li style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 8px">
+<span style="flex: 0 0 auto; min-width: 40px; text-align: center; font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; padding: 3px 6px; border-radius: 4px; background: #EEF0F4; color: #2A2F38">AAPL</span>
+<div style="min-width: 0; display: flex; flex-direction: column; gap: 2px">
+<span style="font-size: 14px; font-weight: 500; overflow-wrap: anywhere">Apple Inc. · Form 10-K</span>
+<span style="font-size: 12px; color: #555B66">FY2025 · 384 chunks</span>
+</div>
+</li>
+
+<li style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 8px">
+<span style="flex: 0 0 auto; min-width: 40px; text-align: center; font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; padding: 3px 6px; border-radius: 4px; background: #EEF0F4; color: #2A2F38">MSFT</span>
+<div style="min-width: 0; display: flex; flex-direction: column; gap: 2px">
+<span style="font-size: 14px; font-weight: 500; overflow-wrap: anywhere">Microsoft Corp. · Form 10-K</span>
+<span style="font-size: 12px; color: #555B66">FY2025 · 412 chunks</span>
+</div>
+</li>
+
+<li style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 8px">
+<span style="flex: 0 0 auto; min-width: 40px; text-align: center; font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; padding: 3px 6px; border-radius: 4px; background: #EEF0F4; color: #2A2F38">NVDA</span>
+<div style="min-width: 0; display: flex; flex-direction: column; gap: 2px">
+<span style="font-size: 14px; font-weight: 500; overflow-wrap: anywhere">NVIDIA Corp. · Form 10-K</span>
+<span style="font-size: 12px; color: #555B66">FY2026 · 356 chunks</span>
+</div>
+</li>
+
+<li style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 8px">
+<span style="flex: 0 0 auto; min-width: 40px; text-align: center; font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; padding: 3px 6px; border-radius: 4px; background: #EEF0F4; color: #2A2F38">PDF</span>
+<div style="min-width: 0; display: flex; flex-direction: column; gap: 2px">
+<span style="font-size: 14px; font-weight: 500; overflow-wrap: anywhere">client-notes-q3.pdf</span>
+<span style="font-size: 12px; color: #555B66">Uploaded today · 22 chunks</span>
+</div>
+</li>
+
+</ul>
+</aside>
+<main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 56px 32px 40px">
+<h1 style="margin: 0; font-size: 30px; font-weight: 600">Ask about the indexed filings</h1>
+</main>
+</div>
+<div style="position: absolute; inset: 0; box-sizing: border-box; padding: 56px 16px; background: rgba(21, 23, 28, 0.5); display: flex; align-items: flex-start; justify-content: center">
+<section role="dialog" aria-modal="true" aria-labelledby="upload-title" style="width: 100%; max-width: 640px; box-sizing: border-box; padding: 28px; background: #FFFFFF; border-radius: 14px; display: flex; flex-direction: column; gap: 20px">
+<div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<h2 id="upload-title" style="margin: 0; font-size: 22px; font-weight: 600">Add documents to the library</h2>
+<p style="margin: 0; font-size: 14px; line-height: 1.5; color: #555B66">Each file is split into passages, embedded and added to both the keyword and the vector index.</p>
+</div>
+<a href="01-ask.html" aria-label="Close" style="flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 8px; color: #2A2F38">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+</a>
+</div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 28px 20px; border: 1.5px dashed #A9A59A; border-radius: 12px; background: #FAFAF7; text-align: center">
+<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#555B66" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><path d="M14 3v6h6"></path><path d="M12 18v-6"></path><path d="M9.5 14.5L12 12l2.5 2.5"></path></svg>
+<p style="margin: 0; font-size: 16px; font-weight: 500">Drag files here, or</p>
+<label for="file-input" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 18px; border: 1px solid #1E3A8A; border-radius: 8px; color: #1E3A8A; font-size: 14px; font-weight: 600; cursor: pointer">Choose files</label>
+<input id="file-input" type="file" multiple accept=".pdf,.html,.htm,.txt,.md" style="position: absolute; width: 1px; height: 1px; opacity: 0">
+<p style="margin: 0; font-size: 13px; color: #555B66">PDF, HTML, TXT or Markdown · up to 20 MB each</p>
+</div>
+<fieldset style="margin: 0; padding: 0; border: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px">
+<legend style="padding: 0 0 10px; font-size: 14px; font-weight: 600">Tags for filtering and citations</legend>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="company" style="font-size: 13px; color: #555B66">Company or ticker</label>
+<input id="company" type="text" value="AAPL" style="min-height: 44px; box-sizing: border-box; padding: 0 12px; font-family: inherit; font-size: 14px; color: #15171C; border: 1px solid #C9C6BC; border-radius: 8px">
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="doctype" style="font-size: 13px; color: #555B66">Document type</label>
+<select id="doctype" style="min-height: 44px; padding: 0 10px; font-family: inherit; font-size: 14px; color: #15171C; background: #FFFFFF; border: 1px solid #C9C6BC; border-radius: 8px">
+<option>Form 10-Q</option>
+<option>Form 10-K</option>
+<option>Form 8-K</option>
+<option>Earnings call</option>
+<option>News article</option>
+<option>Other</option>
+</select>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="period" style="font-size: 13px; color: #555B66">Period end</label>
+<input id="period" type="date" value="2026-06-27" style="min-height: 44px; box-sizing: border-box; padding: 0 10px; font-family: inherit; font-size: 14px; color: #15171C; border: 1px solid #C9C6BC; border-radius: 8px">
+</div>
+</fieldset>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<h3 style="margin: 0; font-size: 14px; font-weight: 600">Queue</h3>
+<ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px">
+<li style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid #E2E0D8; border-radius: 10px">
+<div style="flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+<span style="font-size: 14px; font-weight: 500; overflow-wrap: anywhere">apple-10q-2026-q3.pdf</span>
+<span style="font-size: 12px; color: #555B66">1.8 MB · 96 passages</span>
+</div>
+<span style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: #E3F1E7; color: #1F5A33; font-size: 12px; font-weight: 600"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>Indexed</span>
+</li>
+<li style="display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border: 1px solid #E2E0D8; border-radius: 10px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<div style="flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+<span style="font-size: 14px; font-weight: 500; overflow-wrap: anywhere">earnings-call-notes.txt</span>
+<span style="font-size: 12px; color: #555B66">42 KB · embedding passages</span>
+</div>
+<span style="padding: 4px 10px; border-radius: 999px; background: #E8ECF7; color: #1E3A8A; font-size: 12px; font-weight: 600">60%</span>
+</div>
+<div role="progressbar" aria-label="Embedding progress" aria-valuenow="60" aria-valuemin="0" aria-valuemax="100" style="height: 6px; border-radius: 3px; background: #ECEAE3; overflow: hidden">
+<div style="width: 60%; height: 6px; background: #1E3A8A"></div>
+</div>
+</li>
+<li style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid #EBC3BA; border-radius: 10px; background: #FDF4F2">
+<div style="flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+<span style="font-size: 14px; font-weight: 500; overflow-wrap: anywhere">scanned-annual-report.pdf</span>
+<span style="font-size: 12px; line-height: 1.45; color: #8A2A1A">No text found. This looks like a scanned PDF, and OCR isn't supported in this prototype.</span>
+</div>
+<button type="button" style="min-height: 44px; padding: 0 14px; font-family: inherit; font-size: 13px; font-weight: 500; color: #15171C; background: #FFFFFF; border: 1px solid #C9C6BC; border-radius: 8px">Remove</button>
+</li>
+</ul>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-top: 4px">
+<p style="margin: 0; font-size: 12px; color: #555B66">You can close this window. Indexing continues in the background.</p>
+<div style="display: flex; gap: 10px">
+<a href="01-ask.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border: 1px solid #C9C6BC; border-radius: 8px; color: #15171C; font-size: 14px; font-weight: 500; text-decoration: none">Cancel</a>
+<a href="01-ask.html" style="display: inline-flex; align-items: center; min-height: 44px; padding: 0 20px; border-radius: 8px; background: #1E3A8A; color: #FFFFFF; font-size: 14px; font-weight: 600; text-decoration: none">Done</a>
+</div>
+</div>
+</section>
+</div>
+</div>
+</body>
+</html>
