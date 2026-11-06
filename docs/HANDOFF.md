@@ -158,7 +158,8 @@ Implementations:
 - **Prompt-injection guard:** passages (uploads especially) are untrusted. Wrap each one in clear
   delimiters (`<passage id="3" source="AAPL 10-K FY2025, Item 1A">…</passage>`) and state that passage text
   is data, never instructions.
-- Low temperature (0–0.2) and a `max_tokens` limit, both from settings.
+- Low temperature (0–0.2) for `openai_compatible` and a `max_tokens` limit, both from settings. Anthropic gets no
+  temperature, because API version 2026-10-21 rejects it on every model.
 
 ### Citation validation (`qa/citations.py`)
 
@@ -221,7 +222,8 @@ LLM_MODEL=                               # check the provider's current model li
 ANTHROPIC_API_KEY=
 ANTHROPIC_MODEL=                         # check Anthropic's current model list
 LLM_TEMPERATURE=0.1
-LLM_MAX_TOKENS=700
+LLM_MAX_TOKENS=4096                      # thinking models spend this on reasoning too
+LLM_TIMEOUT_SECONDS=60
 
 EMBEDDING_PROVIDER=fastembed             # fastembed | sentence_transformers
 EMBEDDING_MODEL=BAAI/bge-small-en-v1.5

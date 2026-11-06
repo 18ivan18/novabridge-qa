@@ -25,7 +25,9 @@ class Settings(BaseSettings):
     anthropic_api_key: SecretStr = SecretStr("")
     anthropic_model: str = ""
     llm_temperature: float = 0.1
-    llm_max_tokens: int = 700
+    # Thinking models spend this budget on reasoning too, so it is well above a short answer.
+    llm_max_tokens: int = 4096
+    llm_timeout_seconds: float = 60.0
 
     embedding_provider: Literal["fastembed", "sentence_transformers"] = "fastembed"
     embedding_model: str = "BAAI/bge-small-en-v1.5"
