@@ -4,10 +4,13 @@ version = "0.1.0"
 description = "NovaBridge financial analyst Q&A assistant: grounded answers with verifiable citations."
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "bm25s>=0.3.16",
     "chromadb>=1.5.9",
     "fastapi>=0.162.0",
+    "fastembed>=0.9.1",
     "pydantic>=2",
     "pydantic-settings>=2.16.2",
+    "pystemmer>=3.1.0",
     "sentence-transformers>=6.2.0",
     "torch>=2.15.0",
     "uvicorn[standard]>=0.54.0",
@@ -40,10 +43,15 @@ python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
 
+# These libraries ship no type information.
+[[tool.mypy.overrides]]
+module = ["bm25s.*", "Stemmer"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# scripts/ is not a package, so make it importable for tests.
-pythonpath = ["scripts"]
+# scripts/ and eval/ are not packages, so make them importable for tests.
+pythonpath = ["scripts", "eval"]
 # importlib mode lets tests/unit and tests/api hold same-named files without __init__.py packages.
 addopts = "--import-mode=importlib"
 

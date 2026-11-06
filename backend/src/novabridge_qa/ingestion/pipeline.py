@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from novabridge_qa.domain.models import Chunk, Document, DocumentMeta
+from novabridge_qa.domain.models import Chunk, Document, DocumentMeta, indexed_text
 from novabridge_qa.ingestion.chunking import TokenCounter, chunk_document
 from novabridge_qa.ingestion.loaders import load_file
 from novabridge_qa.ingestion.sections import detect_sections
@@ -42,7 +42,6 @@ def chunk_file(
 def ingest_file(
     path: Path,
     meta: DocumentMeta,
-    counter: TokenCounter,
     embedder: Embedder,
     index: DenseIndex,
     *,
@@ -55,9 +54,9 @@ def ingest_file(
         return IngestResult(doc_id=doc_id, chunks=0, skipped=True)
 
     chunks = chunk_file(
-        path, doc_id, counter, chunk_tokens=chunk_tokens, chunk_overlap=chunk_overlap
+        path, doc_id, embedder, chunk_tokens=chunk_tokens, chunk_overlap=chunk_overlap
     )
     document = Document(**asdict(meta), doc_id=doc_id, ingested_at=datetime.now(UTC))
-    embeddings = embedder.embed_documents([chunk.text for chunk in chunks])
+    embeddings = embedder.embed_documents([indexed_text(chunk, document) for chunk in chunks])
     index.add(document, chunks, embeddings)
     return IngestResult(doc_id=doc_id, chunks=len(chunks), skipped=False)

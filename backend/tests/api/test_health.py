@@ -21,7 +21,7 @@ def test_health_reports_configuration(tmp_path: Path) -> None:
     assert response.json() == {
         "status": "ok",
         "llm_provider": "openai_compatible",
-        "embedder": "Qwen/Qwen3-Embedding-0.6B",
+        "embedder": "BAAI/bge-small-en-v1.5",
         "documents": 0,
         "chunks": 0,
     }

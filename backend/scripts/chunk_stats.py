@@ -4,17 +4,15 @@ Run from backend/: uv run python scripts/chunk_stats.py [--samples 5] [--seed 1]
 """
 
 import argparse
-import json
 import random
 import statistics
 from collections import Counter
-from pathlib import Path
 
 from novabridge_qa.config import Settings
+from novabridge_qa.container import build_embedder
 from novabridge_qa.domain.models import Chunk
-from novabridge_qa.ingestion.loaders import SUPPORTED_SUFFIXES
+from novabridge_qa.ingestion.corpus import load_corpus
 from novabridge_qa.ingestion.pipeline import chunk_file
-from novabridge_qa.ingestion.tokens import HuggingFaceTokenCounter
 
 
 def print_distribution(label: str, sizes: list[int]) -> None:
@@ -32,31 +30,27 @@ def main() -> None:
     args = parser.parse_args()
 
     settings = Settings()
-    raw_dir = settings.data_dir / "raw"
-    counter = HuggingFaceTokenCounter(settings.embedding_model)
-    entries = json.loads((raw_dir / "manifest.json").read_text())
+    embedder = build_embedder(settings)
 
     all_chunks: list[tuple[str, Chunk]] = []
     all_sizes: list[int] = []
-    for entry in entries:
-        path = raw_dir / entry["filename"]
-        if Path(entry["filename"]).suffix not in SUPPORTED_SUFFIXES:
-            continue
+    for path, meta in load_corpus(settings.data_dir / "raw"):
         chunks = chunk_file(
             path,
-            entry["sha256"],
-            counter,
+            path.stem,
+            embedder,
             chunk_tokens=settings.chunk_tokens,
             chunk_overlap=settings.chunk_overlap,
         )
-        sizes = [counter.count(chunk.text) for chunk in chunks]
-        all_chunks.extend((entry["ticker"], chunk) for chunk in chunks)
+        sizes = [embedder.count(chunk.text) for chunk in chunks]
+        ticker = meta.ticker or path.stem
+        all_chunks.extend((ticker, chunk) for chunk in chunks)
         all_sizes.extend(sizes)
 
-        print(f"\n{entry['filename']}")
+        print(f"\n{path.name}")
         for section, count in Counter(chunk.section for chunk in chunks).items():
             print(f"  {count:>4}  {section}")
-        print_distribution(entry["ticker"], sizes)
+        print_distribution(ticker, sizes)
 
     print()
     print_distribution("ALL", all_sizes)

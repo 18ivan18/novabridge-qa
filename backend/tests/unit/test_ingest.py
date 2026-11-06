@@ -1,10 +1,12 @@
+import json
+from collections.abc import Sequence
 from datetime import date
 from pathlib import Path
 
 import pytest
-from ingest import document_meta
 
 from novabridge_qa.domain.models import DocumentMeta
+from novabridge_qa.ingestion.corpus import document_meta, load_corpus
 from novabridge_qa.ingestion.pipeline import ingest_file
 from novabridge_qa.retrieval.dense import DenseIndex
 from novabridge_qa.retrieval.embedder import FakeEmbedder
@@ -21,11 +23,6 @@ META = DocumentMeta(
 TEXT = "Item 1. Business\n\n" + "ACME Corp sells anvils to coyotes in the desert. " * 40
 
 
-class WordCounter:
-    def count(self, text: str) -> int:
-        return len(text.split())
-
-
 class CountingEmbedder(FakeEmbedder):
     calls = 0
 
@@ -34,10 +31,16 @@ class CountingEmbedder(FakeEmbedder):
         return super().embed_documents(texts)
 
 
+class RecordingEmbedder(FakeEmbedder):
+    texts: Sequence[str] = ()
+
+    def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
+        self.texts = texts
+        return super().embed_documents(texts)
+
+
 def ingest(path: Path, embedder: FakeEmbedder, index: DenseIndex) -> tuple[str, int, bool]:
-    result = ingest_file(
-        path, META, WordCounter(), embedder, index, chunk_tokens=100, chunk_overlap=10
-    )
+    result = ingest_file(path, META, embedder, index, chunk_tokens=100, chunk_overlap=10)
     return result.doc_id, result.chunks, result.skipped
 
 
@@ -81,6 +84,25 @@ def test_changed_content_is_a_new_document(filing: Path, tmp_path: Path) -> None
 
     assert not skipped
     assert index.count_documents() == 2
+
+
+def test_header_is_embedded_but_stored_text_stays_verbatim(filing: Path, tmp_path: Path) -> None:
+    index = DenseIndex(tmp_path / "index", "fake-model")
+    embedder = RecordingEmbedder()
+
+    ingest(filing, embedder, index)
+
+    assert embedder.texts[0].startswith("ACME Corp · Form 10-K · Item 1 — Business\n")
+    chunk, _ = index.all_passages()[0]
+    assert "Form 10-K" not in chunk.text
+
+
+def test_load_corpus_lists_only_formats_with_a_loader(tmp_path: Path) -> None:
+    common = {"company": "ACME Corp", "ticker": "ACME", "form": "10-K", "period_end": "2025-01-31"}
+    entries = [{**common, "filename": "a.txt"}, {**common, "filename": "a.htm"}]
+    (tmp_path / "manifest.json").write_text(json.dumps(entries))
+
+    assert [path.name for path, _ in load_corpus(tmp_path)] == ["a.txt"]
 
 
 def test_document_meta_maps_10k405_to_10k() -> None:

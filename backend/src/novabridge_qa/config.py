@@ -27,7 +27,8 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.1
     llm_max_tokens: int = 700
 
-    embedding_model: str = "Qwen/Qwen3-Embedding-0.6B"
+    embedding_provider: Literal["fastembed", "sentence_transformers"] = "fastembed"
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
     embedding_device: str = "cpu"
 
     data_dir: Path = Path("./data")
@@ -36,7 +37,7 @@ class Settings(BaseSettings):
     retrieval_candidates: int = 20
     top_k: int = 6
     rrf_k: int = 60
-    min_relevance: float = 0.35
+    min_relevance: float = 0.58
     max_upload_mb: int = 20
     # NoDecode: pydantic-settings would otherwise parse list fields as JSON and reject a plain URL.
     cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]

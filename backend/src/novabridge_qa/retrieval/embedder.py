@@ -4,9 +4,16 @@ import hashlib
 import math
 import re
 from collections.abc import Sequence
-from typing import Protocol
+from typing import Any, Protocol, cast
 
 _WORD = re.compile(r"\w+")
+
+# fastembed embeds queries as they are, so the instructions from the model cards are added here.
+_BGE_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
+_QUERY_PREFIXES = {
+    "BAAI/bge-small-en-v1.5": _BGE_QUERY_PREFIX,
+    "BAAI/bge-base-en-v1.5": _BGE_QUERY_PREFIX,
+}
 
 
 class Embedder(Protocol):
@@ -15,6 +22,41 @@ class Embedder(Protocol):
     def embed_documents(self, texts: Sequence[str]) -> list[list[float]]: ...
 
     def embed_query(self, text: str) -> list[float]: ...
+
+    def count(self, text: str) -> int:
+        """Count tokens with this model's tokenizer, so chunks fit what the model can read."""
+        ...
+
+
+class FastEmbedEmbedder:
+    """ONNX embeddings: no torch, small download, fast on CPU."""
+
+    def __init__(self, model_name: str, batch_size: int = 16) -> None:
+        # Imported here because it loads onnxruntime, which tests never need.
+        from fastembed import TextEmbedding
+        from tokenizers import Tokenizer
+
+        self._model = TextEmbedding(model_name)
+        self.dimension = self._model.embedding_size
+        self._batch_size = batch_size
+        self._query_prefix = _QUERY_PREFIXES.get(model_name, "")
+        # The model's tokenizer stops at its input limit, which would hide oversized text from
+        # the chunker. This copy counts everything. fastembed has no typed way to reach it.
+        model_tokenizer = cast(Any, self._model.model).tokenizer
+        self._tokenizer = Tokenizer.from_str(model_tokenizer.to_str())
+        self._tokenizer.no_truncation()
+        self._tokenizer.no_padding()
+
+    def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
+        vectors = self._model.embed(list(texts), batch_size=self._batch_size)
+        return [vector.tolist() for vector in vectors]
+
+    def embed_query(self, text: str) -> list[float]:
+        vector = next(iter(self._model.embed([self._query_prefix + text])))
+        return [float(value) for value in vector]
+
+    def count(self, text: str) -> int:
+        return len(self._tokenizer.encode(text, add_special_tokens=False).ids)
 
 
 class SentenceTransformerEmbedder:
@@ -43,6 +85,9 @@ class SentenceTransformerEmbedder:
         vector = self._model.encode_query(text, normalize_embeddings=True)
         return [float(value) for value in vector]
 
+    def count(self, text: str) -> int:
+        return len(self._model.tokenizer.encode(text, add_special_tokens=False))
+
 
 class FakeEmbedder:
     """Deterministic bag-of-words vectors: texts sharing words get similar vectors."""
@@ -64,3 +109,6 @@ class FakeEmbedder:
 
     def embed_query(self, text: str) -> list[float]:
         return self._embed(text)
+
+    def count(self, text: str) -> int:
+        return len(text.split())

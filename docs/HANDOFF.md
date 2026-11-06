@@ -63,7 +63,7 @@ The brief explicitly says: *"This task tests your judgment and ability to verify
 | D1 | Plain Python core, **no LlamaIndex/LangChain** | Every step (chunking, fusion, prompt, citation check) is visible, testable and explainable. LlamaIndex would duplicate our own LLM adapter layer and hide the citation logic in its templates. Trade-off: more code; the brief only *suggests* frameworks. |
 | D2 | **LLM behind an adapter interface**, provider chosen by env var | `LLM_PROVIDER=openai_compatible` (Groq, Ollama, OpenAI by changing `base_url`) or `anthropic`. Shows clean ports-and-adapters design, keeps the system runnable for free (Groq/Ollama), and lets tests use a `FakeLLM`. |
 | D3 | **Embedder is a separate interface** from the LLM | Anthropic has no embeddings API, so the embedding provider can't follow the LLM provider. |
-| D4 | Embeddings: **Qwen3-Embedding-0.6B** (Apache 2.0) via `sentence-transformers`, CPU | One of the strongest small open models (Oct 2026 MTEB); runs locally, free, offline. Alternative to compare in the evaluation: `microsoft/harrier-oss-v1-0.6b` (MIT). Final choice decided by **our own recall@k**, not the leaderboard. Trade-off: PyTorch makes the Docker image big; use CPU-only torch wheels. |
+| D4 | Embeddings: **`BAAI/bge-small-en-v1.5` via `fastembed`** to start; selected by `EMBEDDING_PROVIDER` | Small ONNX model, fast on CPU, runs locally and free, so the system works end to end first. Limit: 512 input tokens, so `CHUNK_TOKENS` must stay below it. `sentence_transformers` remains a provider for **Qwen3-Embedding-0.6B** (Apache 2.0) and `microsoft/harrier-oss-v1-0.6b` (MIT). The final choice comes from **our own recall@k** in a later comparison, not the leaderboard. |
 | D5 | **Hybrid retrieval**: BM25 (`bm25s`) + dense (Chroma), merged with **Reciprocal Rank Fusion** written by hand | Financial text is full of exact terms (tickers, "Item 1A", product names, numbers) where BM25 wins, and paraphrased questions where dense wins. RRF needs no score calibration. `score(d) = Σ 1/(k + rank_i(d))`, k = 60 (Cormack et al., 2009). About 15 lines; unit-tested. |
 | D6 | **Vector store: ChromaDB** (persistent, embedded) | Zero ops, stores text + metadata, good enough for thousands of chunks. Chroma is the **single source of truth** for chunks; the BM25 index is derived from it and can be rebuilt. |
 | D7 | **Citations checked on the server** | Passages are numbered `[1]..[k]` in the prompt; the model must cite `[n]`. The server parses citations, drops numbers that don't exist, renumbers the rest in order of first appearance, and returns only cited passages as `sources`. Zero valid citations → treated as insufficient evidence. |
@@ -80,10 +80,10 @@ The brief explicitly says: *"This task tests your judgment and ability to verify
 
 **Backend (`backend/pyproject.toml`)**
 - Runtime: `fastapi`, `uvicorn[standard]`, `pydantic>=2`, `pydantic-settings`, `python-multipart`
-- Retrieval: `chromadb`, `bm25s` (+ `PyStemmer`), `sentence-transformers` (CPU `torch`)
+- Retrieval: `chromadb`, `bm25s` (+ `PyStemmer`), `fastembed`, `sentence-transformers` (CPU `torch`, for the later embedder comparison)
 - LLM: `openai` (OpenAI-compatible client), `anthropic`
 - Parsing: `beautifulsoup4` + `lxml` (EDGAR HTML), `pypdf` (PDF text layer)
-- Tokens for chunking: the embedder's own tokenizer (from `sentence-transformers`); no extra library
+- Tokens for chunking: the embedder's own tokenizer, through `Embedder.count()`; no extra library
 - HTTP for the fetch script: `httpx`
 - Dev: `pytest`, `pytest-asyncio` (only if needed), `ruff`, `mypy`, `types-*` stubs as needed
 
@@ -223,7 +223,8 @@ ANTHROPIC_MODEL=                         # check Anthropic's current model list
 LLM_TEMPERATURE=0.1
 LLM_MAX_TOKENS=700
 
-EMBEDDING_MODEL=Qwen/Qwen3-Embedding-0.6B
+EMBEDDING_PROVIDER=fastembed             # fastembed | sentence_transformers
+EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
 EMBEDDING_DEVICE=cpu
 
 DATA_DIR=./data
@@ -232,7 +233,7 @@ CHUNK_OVERLAP=60
 RETRIEVAL_CANDIDATES=20
 TOP_K=6
 RRF_K=60
-MIN_RELEVANCE=0.35                       # tuned in M4; document the chosen value
+MIN_RELEVANCE=0.58                       # tuned for bge-small in M4; retune for any other embedder
 MAX_UPLOAD_MB=20
 CORS_ORIGINS=http://localhost:5173
 
@@ -302,8 +303,8 @@ novabridge-qa/
 │   │   ├── fetch_filings.py      # download the 10-Ks from EDGAR into data/raw/
 │   │   └── ingest.py             # (re)build the index from data/raw/
 │   ├── eval/
-│   │   ├── questions.jsonl       # ~15–20 hand-written Q → expected doc + section (+ "unanswerable")
-│   │   └── run_eval.py           # recall@k / MRR for bm25 vs dense vs hybrid; embedder comparison
+│   │   ├── questions.jsonl       # ~15–20 hand-written Q → company, section, evidence pattern (+ "unanswerable")
+│   │   └── run_eval.py           # recall@k / MRR for bm25 vs dense vs hybrid; gate thresholds
 │   ├── data/
 │   │   ├── raw/                  # committed EDGAR filings + manifest.json (metadata)
 │   │   ├── index/                # gitignored: chroma + bm25
@@ -382,8 +383,8 @@ Ivan spot-checks 5 random chunks.
 **M4 — Sparse, fusion, evaluation**
 bm25s wrapper (stemming + English stopwords, persisted, rebuildable from Chroma), `rrf()`, `HybridRetriever`
 with metadata filters. `eval/questions.jsonl` (Ivan writes or approves every question) and `run_eval.py`
-reporting recall@1/3/6 and MRR for bm25 vs dense vs hybrid, and for Qwen3-0.6B vs harrier-0.6b.
-Tune `CHUNK_TOKENS`, `TOP_K` and `MIN_RELEVANCE`.
+reporting recall@k and MRR for bm25 vs dense vs hybrid with the fastembed embedder.
+Tune `CHUNK_TOKENS`, `TOP_K` and `MIN_RELEVANCE`; record the reasoning in `eval/decisions.md`.
 ✅ Results table saved to `eval/results.md` and later copied into the README.
 
 **M5 — LLM adapters**
@@ -413,6 +414,11 @@ answers a question about it.
 First HTML (BeautifulSoup with scripts/styles/hidden XBRL removed), then PDF (pypdf with page numbers). Add each
 to ingestion and to the upload's accepted types. Ingest the current HTML 10-Ks and re-run the eval on them.
 ✅ Loader unit tests with synthetic fixtures; a real file of each format answers a question.
+
+**M8c — Embedder comparison**
+Compare fastembed, Qwen3-0.6B and harrier-0.6b with `run_eval.py`, using a separate index per model. Retune
+`MIN_RELEVANCE` for the winner.
+✅ Comparison table added to `eval/results.md`; D4 updated with the final choice.
 
 **M9 — Frontend**
 Vite + React + TS app with shadcn/ui and TanStack Query (mutations for ask and upload, `refetchInterval` for job

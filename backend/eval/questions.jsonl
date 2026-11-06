@@ -1,0 +1,29 @@
+{"id": "a01", "question": "How many people worked at Apple at the end of fiscal 2000?", "ticker": "AAPL", "section": "Item 1", "evidence": "8,568 employees"}
+{"id": "a02", "question": "What were Apple's total net sales in fiscal 2000?", "ticker": "AAPL", "section": "Item 7", "evidence": "Total net sales\\.+ \\$ ?7,983"}
+{"id": "a03", "question": "How much did Apple spend on research and development in 2000?", "ticker": "AAPL", "section": "Item 1", "evidence": "totaled \\$380 million"}
+{"id": "a04", "question": "What happens to Apple if a key component only available from one vendor is delayed?", "ticker": "AAPL", "section": "Item 8", "evidence": "single-sourced"}
+{"id": "a05", "question": "What is the technical foundation of Apple's next operating system?", "ticker": "AAPL", "section": "Item 1", "evidence": "open-source UNIX"}
+{"id": "a06", "question": "What special bonus did Steve Jobs receive for serving as interim CEO?", "ticker": "AAPL", "section": "Item 11", "evidence": "in the form of an aircraft"}
+{"id": "a07", "question": "What was Apple's effective tax rate for 2000?", "ticker": "AAPL", "section": "Item 7", "evidence": "effective tax rate for 2000 was 28%"}
+{"id": "a08", "question": "Which internet service provider did Apple partner with to offer access to Macintosh users?", "ticker": "AAPL", "section": "Item 1", "evidence": "EarthLink Network Inc"}
+{"id": "m01", "question": "How many employees did Microsoft have?", "ticker": "MSFT", "section": "Item 1", "evidence": "approximately 47,600 people"}
+{"id": "m02", "question": "How much did Microsoft spend on research and development in 2001?", "ticker": "MSFT", "section": "Item 1", "evidence": "\\$4\\.38 billion"}
+{"id": "m03", "question": "What is the status of the US government's antitrust case against Microsoft?", "ticker": "MSFT", "section": "Item 8", "evidence": "Antitrust Division"}
+{"id": "m04", "question": "Does Microsoft return cash to shareholders through dividends?", "ticker": "MSFT", "section": "Item 5", "evidence": "has not paid cash dividends"}
+{"id": "m05", "question": "How much revenue came from Desktop Applications at Microsoft?", "ticker": "MSFT", "section": "Item 7", "evidence": "Desktop Applications revenue was"}
+{"id": "m06", "question": "When is Windows XP expected to reach customers?", "ticker": "MSFT", "section": "Item 1", "evidence": "widespread availability in October 2001"}
+{"id": "m07", "question": "How many registered shareholders did Microsoft have?", "ticker": "MSFT", "section": "Item 5", "evidence": "112,001 registered holders"}
+{"id": "n01", "question": "Who are NVIDIA's largest customers?", "ticker": "NVDA", "section": "Item 7", "evidence": "Sales to Edom"}
+{"id": "n02", "question": "Which foundry manufactures NVIDIA's chips?", "ticker": "NVDA", "section": "Item 1", "evidence": "TSMC"}
+{"id": "n03", "question": "How much money did Microsoft prepay NVIDIA for the game console chips?", "ticker": "NVDA", "section": "Item 1", "evidence": "\\$200\\.0 million as an advance"}
+{"id": "n04", "question": "What did NVIDIA buy from its former graphics rival?", "ticker": "NVDA", "section": "Item 1", "evidence": "assets of 3dfx"}
+{"id": "n05", "question": "How many engineers did NVIDIA employ in research and development?", "ticker": "NVDA", "section": "Item 1", "evidence": "458 (?:full-time employees|at January 28)"}
+{"id": "n06", "question": "What interest rate do NVIDIA's convertible notes pay?", "ticker": "NVDA", "section": "Item 7", "evidence": "four and three-quarter percent"}
+{"id": "u01", "question": "What was the weather like in Paris last summer?", "unanswerable": "off_topic"}
+{"id": "u02", "question": "What is a good recipe for chocolate cake?", "unanswerable": "off_topic"}
+{"id": "u03", "question": "Who won the football World Cup in 2018?", "unanswerable": "off_topic"}
+{"id": "u04", "question": "How many retail stores does Apple operate?", "unanswerable": "in_domain", "absent": "retail stores?"}
+{"id": "u05", "question": "How much revenue did Apple earn from the iPhone?", "unanswerable": "in_domain", "absent": "iPhone"}
+{"id": "u06", "question": "What was Microsoft's Azure cloud revenue?", "unanswerable": "in_domain", "absent": "Azure"}
+{"id": "u07", "question": "How much revenue does NVIDIA make from artificial intelligence chips?", "unanswerable": "in_domain", "absent": "artificial intelligence"}
+{"id": "u08", "question": "What was Tesla's revenue last year?", "unanswerable": "in_domain", "absent": "Tesla"}

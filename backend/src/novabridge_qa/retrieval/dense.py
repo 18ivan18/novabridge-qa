@@ -7,9 +7,10 @@ from pathlib import Path
 from typing import Any, cast
 
 import chromadb
+from chromadb.api.types import GetResult
 from chromadb.config import Settings as ChromaSettings
 
-from novabridge_qa.domain.models import Chunk, DocSource, DocType, Document
+from novabridge_qa.domain.models import Chunk, DocSource, DocType, Document, SearchFilters
 
 COLLECTION = "chunks"
 
@@ -70,6 +71,20 @@ def _from_metadata(chunk_id: str, text: str, metadata: Mapping[str, Any]) -> tup
     return chunk, document
 
 
+def _where(filters: SearchFilters | None) -> dict[str, Any] | None:
+    if filters is None:
+        return None
+    clauses: list[dict[str, Any]] = []
+    if filters.tickers:
+        clauses.append({"ticker": {"$in": list(filters.tickers)}})
+    if filters.doc_types:
+        clauses.append({"doc_type": {"$in": list(filters.doc_types)}})
+    if not clauses:
+        return None
+    # Chroma rejects "$and" with a single clause.
+    return clauses[0] if len(clauses) == 1 else {"$and": clauses}
+
+
 class DenseIndex:
     def __init__(self, path: Path, embedding_model: str, max_batch_size: int | None = None) -> None:
         client = chromadb.PersistentClient(
@@ -112,13 +127,16 @@ class DenseIndex:
                 metadatas=[_to_metadata(document, chunk) for chunk in batch],
             )
 
-    def search(self, query_embedding: Sequence[float], n: int) -> list[DenseHit]:
+    def search(
+        self, query_embedding: Sequence[float], n: int, filters: SearchFilters | None = None
+    ) -> list[DenseHit]:
         count = self._collection.count()
         if count == 0:
             return []
         result = self._collection.query(
             query_embeddings=[query_embedding],
             n_results=min(n, count),
+            where=_where(filters),
             include=["documents", "metadatas", "distances"],
         )
         # Chroma types these as optional, but they are present because `include` asked for them.
@@ -134,6 +152,28 @@ class DenseIndex:
             # Chroma's cosine distance is 1 - cosine similarity.
             hits.append(DenseHit(chunk, document, similarity=1.0 - distance))
         return hits
+
+    def get(self, chunk_ids: Sequence[str]) -> dict[str, tuple[Chunk, Document]]:
+        if not chunk_ids:
+            return {}
+        result = self._collection.get(ids=list(chunk_ids), include=["documents", "metadatas"])
+        return self._parse_get(result)
+
+    def all_passages(self) -> list[tuple[Chunk, Document]]:
+        result = self._collection.get(include=["documents", "metadatas"])
+        return list(self._parse_get(result).values())
+
+    def matching_ids(self, filters: SearchFilters) -> set[str]:
+        return set(self._collection.get(where=_where(filters), include=[])["ids"])
+
+    @staticmethod
+    def _parse_get(result: GetResult) -> dict[str, tuple[Chunk, Document]]:
+        texts = cast(list[str], result["documents"])
+        metadatas = cast(list[Mapping[str, Any]], result["metadatas"])
+        return {
+            chunk_id: _from_metadata(chunk_id, text, metadata)
+            for chunk_id, text, metadata in zip(result["ids"], texts, metadatas, strict=True)
+        }
 
     def count_chunks(self) -> int:
         return self._collection.count()
