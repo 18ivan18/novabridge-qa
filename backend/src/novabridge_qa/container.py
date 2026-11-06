@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 
 from novabridge_qa.config import Settings
+from novabridge_qa.llm.factory import build_llm
+from novabridge_qa.qa.service import QAService
 from novabridge_qa.retrieval.dense import DenseIndex
 from novabridge_qa.retrieval.embedder import (
     Embedder,
@@ -54,6 +56,16 @@ def build_retriever(settings: Settings, embedder: Embedder, dense: DenseIndex) -
         load_sparse_index(settings, dense),
         candidates=settings.retrieval_candidates,
         rrf_k=settings.rrf_k,
+    )
+
+
+def build_qa_service(settings: Settings, dense: DenseIndex) -> QAService:
+    return QAService(
+        build_retriever(settings, build_embedder(settings), dense),
+        build_llm(settings),
+        top_k=settings.top_k,
+        min_relevance=settings.min_relevance,
+        max_tokens=settings.llm_max_tokens,
     )
 
 
