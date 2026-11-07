@@ -24,6 +24,7 @@ FILING = """<?xml version='1.0' encoding='ASCII'?>
   <span style="display:none">Hidden note.</span></div>
 <div><span>&#8226;</span></div>
 <div><span>Anvils for coyotes.</span></div>
+<div><span>&#8226;</span><span style="padding-left:9pt">Rockets too.</span></div>
 <div id="i7"><span>Item&#160;7.&#160;&#160;Management's Discussion</span></div>
 <div>Line one<br/>line two</div>
 <table>
@@ -85,6 +86,7 @@ def test_page_numbers_are_dropped_and_bullets_join_their_text() -> None:
 
     assert "3" not in paragraphs
     assert "• Anvils for coyotes." in paragraphs
+    assert "• Rockets too." in paragraphs
 
 
 def test_sections_skip_the_table_of_contents() -> None:

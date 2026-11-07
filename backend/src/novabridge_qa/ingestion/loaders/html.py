@@ -31,8 +31,10 @@ _LEADING_SYMBOL = re.compile(r"^[$€£¥]$")
 _TRAILING_SYMBOL = re.compile(r"^[)%]+$")
 # A paragraph that is only a page number. Filings print one at every page break.
 _PAGE_NUMBER = re.compile(r"^\d{1,3}$")
-# Lists are often laid out as a bullet in one element and its text in the next.
+# Lists are often laid out as a bullet in one element and its text in the next, either as two
+# paragraphs or as two spans spaced apart by CSS alone.
 _BULLET = re.compile(r"^[•●◦▪■]$")
+_BULLET_TOUCHING_TEXT = re.compile(r"^([•●◦▪■])(?=\S)", re.MULTILINE)
 
 
 class _TextBuilder:
@@ -142,7 +144,7 @@ def _tidy(blocks: list[str]) -> list[str]:
         if _BULLET.match(block):
             bullet = f"{block} "
             continue
-        tidied.append(bullet + block)
+        tidied.append(bullet + _BULLET_TOUCHING_TEXT.sub(r"\1 ", block))
         bullet = ""
     return tidied
 
