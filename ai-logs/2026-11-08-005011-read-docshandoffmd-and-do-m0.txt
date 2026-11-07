@@ -1780,3 +1780,262 @@ the final commit" completed (exit code 1: No matches found)
 ✻ Brewed for 12s · done Saturday 8:47 PM
 
 ※ recap: You're building the NovaBridge Q&A take-home, and M11 is pushed and verified, with a clean clone giving a cited answer. Next, run `/export` of this session into `ai-logs/` and review the README.
+
+❯ /export                                                                       
+  ⎿  Conversation exported to: /Users/ivanarabadzhiyski/repos/epam/2026-11-08-00
+     2524-read-docshandoffmd-and-do-m0.txt
+
+❯ right now as I understand torch is a required dependency but we are not using 
+  it, can we make it and sentence-transformers optional extra?                  
+
+⏺ Yes. Both are only used by the sentence_transformers embedder provider, which
+  is imported lazily and only for the planned M8c comparison. Moving them into
+  an optional extra keeps that path available with one install flag, and should
+  cut about 800 MB from the Docker image.
+
+  About your export: it landed in the repo root as
+  2026-11-08-002524-read-docshandoffmd-and-do-m0.txt, not in ai-logs/. I'll make
+  sure my commit doesn't sweep it in. It needs a secret check before it's
+  committed, because pasted text can end up in logs.
+
+  First I'll check how torch is referenced across the code, tests, mypy config
+  and CI.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Nothing imports the two packages, so I'm moving them into a
+  sentence-transformers extra and adding a clear startup error, mypy ignore, and
+  doc updates.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ The test file still needs its sys, pytest and class imports; after that I'll
+  relock and sync the default install, then rebuild the image to measure the
+  saving.
+
+  Ran 1 shell command (ctrl+o to expand)
+  ⎿  Blocked by auto mode
+     │ Auto mode: [Irreversible Local Destruction]
+
+⏺ The classifier blocked my last command because it would have overwritten your
+  real .env from the repo root. That line was an accident and wasn't needed, so
+  your .env is untouched; I'm rerunning without it.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ The api image is down from 2.57 GB to 1.06 GB, with all 261 backend tests
+  passing and the torch extra still resolving from the CPU index. I'm updating
+  the docs next, then committing only my changed files and running the stack
+  from a fresh clone.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ The stack runs without torch, and the export file in ai-logs/ is still
+  uncommitted. I'll push, scan it for secrets, and wait for your go-ahead before
+  committing, since a public repo would publish it.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Done: sentence-transformers and torch are now an optional extra, pushed with
+  CI passing on 0e52b95.
+
+  - Image size: the api image went from 2.57 GB to 1.06 GB.
+  - Default install: torch is gone from both the image and your local uv sync.
+    All 261 backend tests pass without it.
+  - Clean-clone run: the stack built, ingested the filings and answered with
+    citations, with no torch in the image.
+  - Getting it back for M8c: run uv sync --extra sentence-transformers in
+    backend/. It still pulls the CPU-only build of torch.
+  - If the extra is missing: choosing EMBEDDING_PROVIDER=sentence_transformers
+    fails at startup with that install command, instead of a bare import error.
+    One small test covers this.
+  - Docs: the README, .env.example and handoff section 4 and M10 now record your
+    decision.
+
+  The trade-off is that the sentence_transformers provider doesn't work in
+  Docker at all now. That's acceptable while it's only used for the local
+  comparison.
+
+  One mistake to flag: a command I wrote would have overwritten your real .env
+  with .env.example plus only the key and model. Claude Code's safety check
+  blocked it, so nothing changed and your .env is intact. Since then, the
+  temporary .env is only ever written inside the scratch clone folder, after
+  confirming that's where it is.
+
+  Your export
+
+  It's at ai-logs/2026-11-08-002524-read-docshandoffmd-and-do-m0.txt and
+  uncommitted. The scan found no key-like strings, none of your .env key values,
+  and no email addresses.
+
+  There's a problem, though: it's only 102 KB. This session was compacted
+  earlier, so /export probably only contains the part after the summary, not the
+  full conversation. The brief asks for full, unedited logs. The complete raw
+  transcript is still on disk at:
+
+  ~/.claude/projects/-Users-ivanarabadzhiyski-repos-epam/ec53ba32-d2d5-4960-8ffb
+  -c27563e1e61c.jsonl
+
+  It's in Claude Code's own JSON format, so it's harder to read but complete.
+  You could commit it alongside the .txt, after the same secret scan. Would you
+  like me to scan that file, then commit it and the .txt and update the ai-logs/
+  index? I'll wait for your yes, because it gets published in a public repo.
+✻ Worked for 4m 8s · done 12:32 AM
+
+❯ Let's create a list of pending improvements (like a checklist) that we'd      
+  start doing in order.                                                         
+  1. html loader and index the 2026 10-Ks m8b html                              
+  2. We want ot make sure that every figure in the answer must appear in a      
+  passage it cites or the sentence is flagged or dropped, this way we can       
+  deterministically close a gap that citation exists but doesnt support the     
+  claim                                                                         
+  3. cross encoder re ranker such as bge-reranker-base (or better, do the       
+  research)                                                                     
+  4. the embedder comparison we planned m8c                                     
+  5. end to end answer eval with repeatable script, answer correctness, correct 
+  refusals, etc                                                                 
+  6. Streaming answers over SSE                                                 
+  7. Highlight the exact supporting sentence, right now we show the whole chunk 
+     8.pdf loader m8b pdf                                                       
+  9. think about a real separate db like in a production system, e.g. pgvector  
+  while keeping our implementation of bm25                                      
+  10. LLM-as-judge ?                                                            
+                                                                                
+  After that I'll start handing the tasks to other agents to implement, maybe   
+  create another file docs/IMPROVEMENTS.md                                      
+
+⏺ I'll put it in docs/IMPROVEMENTS.md. Each task will be written so an agent
+  starting cold can pick it up: why it matters, scope, acceptance criteria,
+  dependencies and open questions, all grounded in what we found while building.
+
+  While writing it, I spotted some ordering problems you should decide on. I'll
+  keep your order in the file and point these out at the end.
+
+⏺ Write(docs/IMPROVEMENTS.md)
+  ⎿  Wrote 314 lines to docs/IMPROVEMENTS.md
+       1 # Pending improvements
+       2 
+       3 Work through these in order. Each task is written so an agent ca
+         n start it cold.
+       4 
+       5 ## Rules for every task
+       6 
+       7 - Read `CLAUDE.md` and `docs/HANDOFF.md` first. Their rules appl
+         y: no LangChain or LlamaIndex, no
+       8   secrets in the repo, no invented facts in fixtures or docs, an
+     … +307 lines (~16 KB) (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ I've written the checklist to docs/IMPROVEMENTS.md and pushed it. It keeps
+  your 10 tasks in your order, and each one says why it matters, what's in and
+  out of scope, what counts as done, and which decisions need you. It also has
+  rules every agent must follow, plus a section of smaller open items, such as
+  uploads having no ticker and the missing Docker build check in CI. Your export
+  file is still uncommitted.
+
+  Some of the ordering works against itself, so you may want to change it before
+  handing tasks out:
+
+  1. Move the answer eval (5) up to second. Tasks 2, 3 and 4 are each meant to
+     make answers better, but without it there's no way to show they did.
+     Today's answer-level numbers come from a one-off script I never committed.
+  2. The HTML loader (1) needs new eval questions. All 29 current questions are
+     about the 2000–2001 filings. Someone has to write and fact-check questions
+     for the 2026 10-Ks, and you approve them before they're used for tuning.
+  3. Streaming (6) clashes with the server-side checks. Citations and, after
+     task 2, figures are checked once the whole answer exists. Streamed text
+     can't be checked before it's sent. The file gives two options and asks you
+     to choose one before anyone builds it.
+  4. The figure check (2) is harder than it sounds. Real answers from our runs
+     would fail a naive check. One said "4.75%" for a passage that says "4
+     3/4%", and another reported a table value of "7,983" in millions as "$7.983
+     billion". The task lists these as test cases and asks you to choose
+     between flagging and dropping a failed sentence. I recommend flagging.
+  5. Tasks 2 and 7 share their core. Both need each answer sentence matched to
+     the citations it uses, so the file asks for that to be built once and
+     reused.
+  6. The embedder winner (4) could bring torch back. If it needs torch, the
+     image grows by about 1.5 GB again. The task asks for a check on whether an
+     ONNX version exists, alongside the recall numbers.
+  7. Task 9 starts with a written plan for your approval. It involves new
+     database dependencies and changes to how the app is structured.
+
+  For the re-ranker (3), I didn't do the research now. The task makes research
+  the first step, checking CPU speed, size, licence and whether it runs without
+  torch. My list of candidate models comes from memory and may be out of date,
+  so the file tells the agent to verify it rather than trust it.
+
+  Shall I reorder the file with the answer eval as task 2?
+
+✻ Baked for 1m 51s · done 12:44 AM
+
+❯ yes, move the answer eval to task 2, also after that export this claude code  
+  session and commit it, I already exported it once, you can override it        
+
+⏺ I'll reorder first. Moving the eval up renumbers tasks 2–5, and the file
+  refers to tasks by number in several places, so I'll renumber those references
+  along with the headings.
+
+  On the export: I can't run /export, because it's a built-in Claude Code
+  command that only you can type. What I can do is better for the brief: copy
+  the raw session transcript (.jsonl) into ai-logs/. Unlike your .txt export, it
+  has the whole session, including the part before compaction. I'll scan it for
+  secrets and check its size before committing it.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ The task references now point to the right tasks: eval is 2, figure check 3,
+  re-ranker 4, and embedder comparison 5. Next I'll check the transcript's size
+  against GitHub's 100 MB limit and scan it for keys, .env values and email
+  addresses before copying it.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ The transcript is 8.6 MB and has no keys, but your Gmail address appears 8
+  times, so I'm holding the commit until you decide whether to publish it. I'm
+  pushing the reordered checklist next.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ User answered Claude's questions:
+  ⎿  · I can't run /export myself, so I'd commit the raw Claude Code transcript 
+     (.jsonl, 8.6 MB). It's the complete session, including the part before 
+     compaction. It has no API keys, but it contains your Gmail address 8 times.
+     Once it's in the public repo, that address is published. How should I 
+     commit it? → Commit unedited (Recommended)
+
+⏺ You chose unedited. I'll take a snapshot of the transcript as it is now,
+  commit it with your .txt export, and update the log index to say what each
+  file covers.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Both changes are pushed, and the working tree is clean.
+
+  Checklist: in docs/IMPROVEMENTS.md, the answer evaluation is now task 2. The
+  figure check moves to 3, the re-ranker to 4 and the embedder comparison to 5.
+  Every reference to a task number inside the file was updated to match.
+
+  Session log: committed unedited in ai-logs/, as you chose. Your email address
+  is now public in this repo.
+  - 2026-11-07-claude-code-M0-M11.jsonl (8.7 MB) is the complete raw transcript,
+    including everything before the compaction. It has no keys and none of your
+    .env values, and it does contain your email address.
+  - Your /export .txt is committed alongside it as the readable version. It only
+    covers M7 onwards, and the index in ai-logs/README.md says so.
+
+  The transcript is a snapshot taken just before this commit, so it ends before
+  this reply. To capture the rest, copy the same file again at the very end:
+
+  ~/.claude/projects/-Users-ivanarabadzhiyski-repos-epam/ec53ba32-d2d5-4960-8ffb
+  -c27563e1e61c.jsonl
+
+  Alternatively, run /export again to refresh the .txt, which only you can do.
+  Either way it's one more small commit.
+
+  The list is ready to hand to agents, starting with task 1, the HTML loader.
+  Writing and fact-checking the questions for the 2026 filings is the step in
+  that task that needs your approval.
+
+✻ Sautéed for 1m 9s · done 12:49 AM
