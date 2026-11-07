@@ -80,7 +80,7 @@ The brief explicitly says: *"This task tests your judgment and ability to verify
 
 **Backend (`backend/pyproject.toml`)**
 - Runtime: `fastapi`, `uvicorn[standard]`, `pydantic>=2`, `pydantic-settings`, `python-multipart`
-- Retrieval: `chromadb`, `bm25s` (+ `PyStemmer`), `fastembed`, `sentence-transformers` (CPU `torch`, for the later embedder comparison)
+- Retrieval: `chromadb`, `bm25s` (+ `PyStemmer`), `fastembed`; `sentence-transformers` (CPU `torch`, for the later embedder comparison) as the optional `sentence-transformers` extra, decided by Ivan to keep it out of the default install and the image
 - LLM: `openai` (OpenAI-compatible client), `anthropic`
 - Parsing: `beautifulsoup4` + `lxml` (EDGAR HTML), `pypdf` (PDF text layer)
 - Tokens for chunking: the embedder's own tokenizer, through `Embedder.count()`; no extra library
@@ -433,7 +433,7 @@ list, retrieval details toggle, no-evidence card, upload dialog with queue and p
 `api/client` error handling); manual run of the full flow.
 
 **M10 — Docker & one-command run**
-Backend Dockerfile (multi-stage, CPU torch, non-root user, embedding model downloaded at build time or cached
+Backend Dockerfile (multi-stage, no torch (optional extra), non-root user, embedding model downloaded at build time or cached
 in a volume, with the trade-off noted); frontend Dockerfile (build → nginx); `docker-compose.yml` with
 healthchecks, a `data` volume, an ingest-on-first-start step, and an optional `ollama` profile.
 ✅ On a clean clone: `cp .env.example .env`, set a key and a model, `docker compose up --build`, open

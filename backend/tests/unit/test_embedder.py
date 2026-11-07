@@ -1,6 +1,9 @@
 import math
+import sys
 
-from novabridge_qa.retrieval.embedder import FakeEmbedder
+import pytest
+
+from novabridge_qa.retrieval.embedder import FakeEmbedder, SentenceTransformerEmbedder
 
 
 def cosine(a: list[float], b: list[float]) -> float:
@@ -29,3 +32,11 @@ def test_fake_embedder_scores_shared_words_higher() -> None:
 
 def test_fake_embedder_handles_empty_text() -> None:
     assert FakeEmbedder(dimension=4).embed_query("") == [0.0] * 4
+
+
+def test_sentence_transformers_explains_how_to_install_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    # None in sys.modules makes the import fail, as it does when the extra is not installed.
+    monkeypatch.setitem(sys.modules, "sentence_transformers", None)
+
+    with pytest.raises(ImportError, match="uv sync --extra sentence-transformers"):
+        SentenceTransformerEmbedder("any-model", "cpu")

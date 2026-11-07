@@ -61,8 +61,14 @@ class FastEmbedEmbedder:
 
 class SentenceTransformerEmbedder:
     def __init__(self, model_name: str, device: str, batch_size: int = 8) -> None:
-        # Imported here because it takes seconds and pulls in torch, which tests never need.
-        from sentence_transformers import SentenceTransformer
+        # Imported here because it is an optional extra, and slow to import because of torch.
+        try:
+            from sentence_transformers import SentenceTransformer
+        except ImportError as error:
+            raise ImportError(
+                "EMBEDDING_PROVIDER=sentence_transformers needs the optional dependencies: "
+                "run `uv sync --extra sentence-transformers` in backend/"
+            ) from error
 
         # The model defaults to bfloat16, which measured 10x slower on CPU than float32.
         self._model = SentenceTransformer(

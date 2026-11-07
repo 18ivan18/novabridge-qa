@@ -972,10 +972,14 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pystemmer" },
     { name = "python-multipart" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.optional-dependencies]
+sentence-transformers = [
     { name = "sentence-transformers" },
     { name = "torch", version = "2.15.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
     { name = "torch", version = "2.15.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
-    { name = "uvicorn", extra = ["standard"] },
 ]
 
 [package.dev-dependencies]
@@ -999,10 +1003,11 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.16.2" },
     { name = "pystemmer", specifier = ">=3.1.0" },
     { name = "python-multipart", specifier = ">=0.0.33" },
-    { name = "sentence-transformers", specifier = ">=6.2.0" },
-    { name = "torch", specifier = ">=2.15.0", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "sentence-transformers", marker = "extra == 'sentence-transformers'", specifier = ">=6.2.0" },
+    { name = "torch", marker = "extra == 'sentence-transformers'", specifier = ">=2.15.0", index = "https://download.pytorch.org/whl/cpu" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.54.0" },
 ]
+provides-extras = ["sentence-transformers"]
 
 [package.metadata.requires-dev]
 dev = [

@@ -95,7 +95,8 @@ flowchart TD
 | **SEC EDGAR filings as the corpus** | Real, relevant and public domain, so they can be committed | See the limitations on their age |
 | **Upload as a background job** | Embedding is slow, so the request returns at once and the UI polls | In-memory jobs, one uvicorn worker. Production would use a queue such as Celery, RQ or Arq with a persisted job table |
 | **Vite, React, shadcn/ui, TanStack Query** | Components live in the repository and can be styled to the design. TanStack Query replaces hand-written loading and polling code. | Tailwind and Radix become dependencies |
-| **Embedding model baked into the image** | No download on first start | 65 MB more image. The `api` image is 2.57 GB, mostly because CPU `torch` is included for a planned embedder comparison |
+| **Embedding model baked into the image** | No download on first start | 65 MB more image. The `api` image is 1.06 GB |
+| **`sentence-transformers` and `torch` as an optional extra** | Only needed for the planned embedder comparison, and `torch` alone is about 700 MB | That provider does not work in Docker, and needs `uv sync --extra sentence-transformers` locally |
 
 ## Retrieval evaluation
 
