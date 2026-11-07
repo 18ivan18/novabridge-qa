@@ -68,6 +68,12 @@ fiscal 2000 and $478,834 million for 2026, each cited to its own filing. A perio
 an analyst exclude the old filings, and is the next step if mixed answers get in the way. It needs
 a `period_end` filter in `SearchFilters` and in the UI.
 
+**Where this falls short:** the prompt only requires a period for figures. Asked "How dependent is
+NVIDIA on a few large customers?" (`n24`, a retrieval miss), the model answered from the 2001 filing
+alone, with no figure and no year, so the answer reads as current. The source card shows the
+period, but the sentence does not. Two possible fixes, not yet made or measured: a prompt rule to
+name the filing period of every claim, or the period filter above.
+
 The evaluation follows the same rule: each answerable question names its filing (`ticker` and
 `period_end`), and a passage with the evidence from the other filing of the same company does not
 count.
