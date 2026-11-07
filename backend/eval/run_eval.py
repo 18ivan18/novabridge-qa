@@ -45,6 +45,9 @@ class Question:
     period_end: str | None = None
     section: str | None = None
     evidence: str | None = None
+    # Facts the answer must state, each a case-insensitive pattern whose alternatives are
+    # accepted ways of writing it. Used by run_answer_eval.py.
+    expected: list[str] | None = None
     unanswerable: str | None = None
     absent: str | None = None
 
@@ -106,6 +109,10 @@ def validate(questions: Sequence[Question], texts: dict[str, str]) -> None:
             raise ValueError(f"{question.id}: no filing {key} in the corpus")
         elif not re.search(question.evidence, texts[key]):
             raise ValueError(f"{question.id}: evidence is not in the {key} filing")
+        else:
+            for fact in question.expected or []:
+                if not re.search(fact, texts[key], re.IGNORECASE):
+                    raise ValueError(f"{question.id}: expected {fact!r} is not in the {key} filing")
         if question.absent and any(
             re.search(question.absent, text, re.IGNORECASE) for text in texts.values()
         ):

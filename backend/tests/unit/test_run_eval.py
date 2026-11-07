@@ -1,3 +1,4 @@
+import re
 from datetime import UTC, date, datetime
 
 import pytest
@@ -75,6 +76,19 @@ def test_validate_rejects_evidence_missing_from_the_filing() -> None:
 def test_validate_rejects_a_question_about_a_filing_not_in_the_corpus() -> None:
     with pytest.raises(ValueError, match="no filing"):
         validate([QUESTION], {"ACME 2001-01-31": "sold 10 anvils"})
+
+
+def test_validate_rejects_an_expected_fact_missing_from_the_filing() -> None:
+    question = Question(**{**QUESTION.__dict__, "expected": ["10 anvils", "11 anvils|eleven"]})
+
+    with pytest.raises(ValueError, match=re.escape("'11 anvils|eleven'")):
+        validate([question], {FILING: "sold 10 anvils"})
+
+
+def test_validate_accepts_an_expected_fact_by_any_alternative() -> None:
+    question = Question(**{**QUESTION.__dict__, "expected": ["ten anvils|10 ANVILS"]})
+
+    validate([question], {FILING: "sold 10 anvils"})
 
 
 def test_validate_rejects_absent_term_that_occurs() -> None:
