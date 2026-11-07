@@ -80,7 +80,7 @@ count.
 
 ## Questions changed for the second corpus
 
-Questions are pending Ivan's approval, and none of the settings were tuned on them.
+Ivan approved the questions after trying them in the UI. None of the settings were tuned on them.
 
 - **Added:** 24 answerable questions on the 2026 filings (8 per company, about half answered by a
   table row) and 3 in-domain unanswerable ones (`u09`–`u11`).
@@ -111,7 +111,7 @@ indexed.
   the MRR drop is the evidence moving down behind passages from the other generation.
 - **New misses at 400 tokens:** `a25` (Apple's buyback), `m25` (net income), `m28` (dividends per
   share) and `n24` (customer concentration). Two of them are rows of financial statements.
-- **Nothing was retuned.** The questions are not approved yet. `CHUNK_TOKENS` 400 is no longer the
+- **Nothing was retuned.** The questions were written after the settings were chosen. `CHUNK_TOKENS` 400 is no longer the
   best hybrid setting for the HTML questions (300 gives R@6 0.88), but the gap is one question.
 - **Relevance gate:** the highest off-topic score rose from 0.491 to 0.528, still under
   `MIN_RELEVANCE` 0.58, so 3 of 3 are still blocked, but with less margin.

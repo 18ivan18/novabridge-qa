@@ -116,7 +116,7 @@ passages. All six filings are indexed. At the chosen 400 tokens:
 
 With only the TXT filings indexed, hybrid R@6 on the same 21 questions was 0.86 (MRR 0.647). The
 2026 filings answer some of the same questions for another year, which pushes the old evidence down.
-The 2026 questions are not yet approved, and nothing has been tuned on them.
+The 2026 questions were approved by hand, and nothing has been tuned on them.
 
 **Tuned:** `CHUNK_TOKENS` stayed at 400, `TOP_K` at 6 and `MIN_RELEVANCE` became 0.58. Adding the
 indexing header raised hybrid R@6 from 0.76 to 0.86.
