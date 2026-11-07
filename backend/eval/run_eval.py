@@ -5,6 +5,10 @@ Run from backend/: uv run python eval/run_eval.py
 For each chunk size the corpus is indexed into a temporary directory, so the real index is
 untouched. A question counts as found when a passage from the right company contains its
 `evidence` pattern. That is stricter than matching a section, which can span dozens of chunks.
+
+Both generations of filings are indexed, so each answerable question names its filing by
+`ticker` and `period_end`, and only a passage from that filing counts. Scores are reported per
+filing format, which separates the TXT filings from the HTML ones.
 """
 
 import json
@@ -18,7 +22,7 @@ from typing import get_args
 
 from novabridge_qa.config import Settings
 from novabridge_qa.container import build_embedder
-from novabridge_qa.domain.models import ScoredPassage
+from novabridge_qa.domain.models import DocumentMeta, ScoredPassage
 from novabridge_qa.ingestion.corpus import load_corpus
 from novabridge_qa.ingestion.loaders import load_file
 from novabridge_qa.ingestion.pipeline import ingest_file
@@ -38,6 +42,7 @@ class Question:
     id: str
     question: str
     ticker: str | None = None
+    period_end: str | None = None
     section: str | None = None
     evidence: str | None = None
     unanswerable: str | None = None
@@ -59,10 +64,20 @@ def load_questions(path: Path) -> list[Question]:
     return [Question(**json.loads(line)) for line in path.read_text().splitlines()]
 
 
+def filing_key(ticker: str | None, period_end: str | None) -> str:
+    return f"{ticker} {period_end}"
+
+
+def document_key(document: DocumentMeta) -> str:
+    period_end = document.period_end.isoformat() if document.period_end else None
+    return filing_key(document.ticker, period_end)
+
+
 def first_hit_rank(passages: Sequence[ScoredPassage], question: Question) -> int | None:
     assert question.evidence is not None
+    target = filing_key(question.ticker, question.period_end)
     for rank, passage in enumerate(passages, start=1):
-        if passage.document.ticker == question.ticker and re.search(
+        if document_key(passage.document) == target and re.search(
             question.evidence, normalize(passage.chunk.text)
         ):
             return rank
@@ -80,10 +95,17 @@ def share_at_or_above(similarities: Sequence[float], threshold: float) -> int:
 
 
 def validate(questions: Sequence[Question], texts: dict[str, str]) -> None:
-    """Fail on a question whose ground truth does not hold in the filings."""
+    """Fail on a question whose ground truth does not hold in the filings.
+
+    `texts` maps each filing's `filing_key` to its normalized text.
+    """
     for question in questions:
-        if question.evidence and not re.search(question.evidence, texts[question.ticker or ""]):
-            raise ValueError(f"{question.id}: evidence is not in the {question.ticker} filing")
+        if not question.evidence:
+            pass
+        elif (key := filing_key(question.ticker, question.period_end)) not in texts:
+            raise ValueError(f"{question.id}: no filing {key} in the corpus")
+        elif not re.search(question.evidence, texts[key]):
+            raise ValueError(f"{question.id}: evidence is not in the {key} filing")
         if question.absent and any(
             re.search(question.absent, text, re.IGNORECASE) for text in texts.values()
         ):
@@ -113,16 +135,37 @@ def build_retriever(
     return retriever, dense
 
 
-def retrieval_table(rows: list[tuple[int, str, int, Scores]]) -> str:
-    header = "| Chunk tokens | Chunks | Mode | " + " | ".join(f"R@{k}" for k in K_VALUES)
+@dataclass(frozen=True)
+class Row:
+    chunk_tokens: int
+    chunks: int
+    mode: str
+    question_set: str
+    scores: Scores
+
+
+def retrieval_table(rows: Sequence[Row]) -> str:
+    recall_headers = " | ".join(f"R@{k}" for k in K_VALUES)
     lines = [
-        header + " | MRR |",
-        "|---|---|---|" + "---|" * (len(K_VALUES) + 1),
+        f"| Chunk tokens | Chunks | Mode | Questions | {recall_headers} | MRR |",
+        "|---|---|---|---|" + "---|" * (len(K_VALUES) + 1),
     ]
-    for chunk_tokens, chunks, mode, scores in [(r[0], r[2], r[1], r[3]) for r in rows]:
-        recalls = " | ".join(f"{scores.recall[k]:.2f}" for k in K_VALUES)
-        lines.append(f"| {chunk_tokens} | {chunks} | {mode} | {recalls} | {scores.mrr:.3f} |")
+    for row in rows:
+        recalls = " | ".join(f"{row.scores.recall[k]:.2f}" for k in K_VALUES)
+        lines.append(
+            f"| {row.chunk_tokens} | {row.chunks} | {row.mode} | {row.question_set} "
+            f"| {recalls} | {row.scores.mrr:.3f} |"
+        )
     return "\n".join(lines)
+
+
+def question_sets(answerable: Sequence[Question], formats: dict[str, str]) -> dict[str, list[int]]:
+    """Group question positions by the format of their filing, such as "TXT filings (21)"."""
+    groups: dict[str, list[int]] = {}
+    for position, question in enumerate(answerable):
+        suffix = formats[filing_key(question.ticker, question.period_end)]
+        groups.setdefault(suffix.lstrip(".").upper(), []).append(position)
+    return {f"{name} filings ({len(group)})": group for name, group in sorted(groups.items())}
 
 
 def gate_table(answerable: list[float], off_topic: list[float], in_domain: list[float]) -> str:
@@ -145,14 +188,13 @@ def main() -> None:
     settings = Settings()
     questions = load_questions(EVAL_DIR / "questions.jsonl")
     corpus = load_corpus(settings.data_dir / "raw")
-    validate(
-        questions,
-        {meta.ticker or "": normalize(load_file(path).text) for path, meta in corpus},
-    )
+    keys = [(path, document_key(meta)) for path, meta in corpus]
+    validate(questions, {key: normalize(load_file(path).text) for path, key in keys})
     answerable = [q for q in questions if q.evidence]
+    sets = question_sets(answerable, {key: path.suffix.lower() for path, key in keys})
     embedder = build_embedder(settings)
 
-    rows: list[tuple[int, str, int, Scores]] = []
+    rows: list[Row] = []
     misses: list[str] = []
     gate_sections: list[str] = []
     for chunk_tokens in CHUNK_SIZES:
@@ -163,7 +205,9 @@ def main() -> None:
                     first_hit_rank(retriever.search(q.question, max(K_VALUES), mode=mode), q)
                     for q in answerable
                 ]
-                rows.append((chunk_tokens, mode, dense.count_chunks(), score(ranks, K_VALUES)))
+                for name, positions in sets.items():
+                    scores = score([ranks[p] for p in positions], K_VALUES)
+                    rows.append(Row(chunk_tokens, dense.count_chunks(), mode, name, scores))
                 for question, rank in zip(answerable, ranks, strict=True):
                     if rank is None or rank > settings.top_k:
                         misses.append(f"| {chunk_tokens} | {mode} | {question.id} | {rank} |")
@@ -188,8 +232,9 @@ def main() -> None:
             "# Retrieval evaluation",
             f"Embedder: `{settings.embedding_model}`. Overlap: {settings.chunk_overlap} tokens. "
             f"Candidates per retriever: {settings.retrieval_candidates}. RRF k: {settings.rrf_k}. "
-            f"Questions: {len(answerable)} answerable, "
-            f"{len(questions) - len(answerable)} unanswerable. Unfiltered searches.",
+            f"Filings indexed: {len(corpus)}. Questions: {len(answerable)} answerable, "
+            f"{len(questions) - len(answerable)} unanswerable. Unfiltered searches over all "
+            "filings; a question counts as found only in the filing it names.",
             "## Recall and MRR",
             retrieval_table(rows),
             f"## Questions not found within top {settings.top_k}",
