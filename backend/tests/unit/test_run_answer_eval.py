@@ -251,7 +251,7 @@ def test_errors_and_questions_not_asked_are_reported() -> None:
     error = {"type": "error", "id": "q1", "error": "timed out"}
 
     assert score_record(NEW, "HTM", error).error == "timed out"
-    assert score_record(NEW, "HTM", None).error == "not asked"
+    assert not score_record(NEW, "HTM", None).asked
 
 
 def test_score_run_groups_by_filing_format_then_unanswerable_kind() -> None:

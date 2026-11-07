@@ -212,6 +212,7 @@ class Result:
     id: str
     question_set: str
     answerable: bool
+    asked: bool
     answered: bool
     refusal: str | None
     error: str | None
@@ -234,11 +235,11 @@ def score_record(question: Question, question_set: str, record: Record | None) -
     target = filing_key(question.ticker, question.period_end)
     answerable = question.evidence is not None
     empty = Result(
-        question.id, question_set, answerable, False, None, None, None, None, None, (),
+        question.id, question_set, answerable, True, False, None, None, None, None, None, (),
         None, None, None, "", (),
     )  # fmt: skip
     if record is None:
-        return Result(**{**empty.__dict__, "error": "not asked"})
+        return Result(**{**empty.__dict__, "asked": False})
     if record["type"] == "error":
         return Result(**{**empty.__dict__, "error": record["error"]})
 
@@ -325,8 +326,8 @@ def _percentile(values: Sequence[int], share: float) -> int | None:
 def answerable_table(results: Sequence[Result]) -> str:
     lines = [
         "| Questions | Answered | Correct | Evidence cited | Cited only the other filing "
-        "| Refused: gate / model / no citations | Errors |",
-        "|---|---|---|---|---|---|---|",
+        "| Refused: gate / model / no citations | Errors | Not asked |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for name in dict.fromkeys(r.question_set for r in results):
         group = [r for r in results if r.question_set == name]
@@ -340,7 +341,8 @@ def answerable_table(results: Sequence[Result]) -> str:
             f"| {_share(sum(bool(r.correct) for r in group), n)} "
             f"| {_share(sum(bool(r.evidence_cited) for r in group), n)} "
             f"| {_share(sum(bool(r.other_filing_only) for r in group), n)} "
-            f"| {refusals} | {sum(r.error is not None for r in group)} |"
+            f"| {refusals} | {sum(r.error is not None for r in group)} "
+            f"| {sum(not r.asked for r in group)} |"
         )
     return "\n".join(lines)
 
@@ -348,8 +350,8 @@ def answerable_table(results: Sequence[Result]) -> str:
 def unanswerable_table(results: Sequence[Result]) -> str:
     lines = [
         "| Questions | Refused | By the gate | By the model | No valid citations "
-        "| Answered | Errors |",
-        "|---|---|---|---|---|---|---|",
+        "| Answered | Errors | Not asked |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for name in dict.fromkeys(r.question_set for r in results):
         group = [r for r in results if r.question_set == name]
@@ -359,7 +361,8 @@ def unanswerable_table(results: Sequence[Result]) -> str:
             f"| {sum(r.refusal == 'gate' for r in group)} "
             f"| {sum(r.refusal == 'model' for r in group)} "
             f"| {sum(r.refusal == 'no_citations' for r in group)} "
-            f"| {sum(r.answered for r in group)} | {sum(r.error is not None for r in group)} |"
+            f"| {sum(r.answered for r in group)} | {sum(r.error is not None for r in group)} "
+            f"| {sum(not r.asked for r in group)} |"
         )
     return "\n".join(lines)
 
@@ -371,7 +374,7 @@ def cost_summary(results: Sequence[Result]) -> str:
     tokens_in = sum(r.input_tokens or 0 for r in called)
     tokens_out = sum(r.output_tokens or 0 for r in called)
     unknown = sum(r.input_tokens is None for r in called)
-    median = statistics.median(latencies) if latencies else None
+    median = round(statistics.median(latencies)) if latencies else None
     lines = [
         f"- LLM calls: {len(called)} (the gate answered {len(timed) - len(called)} without one).",
         f"- Latency per question with an LLM call: median {median} ms, "
@@ -393,7 +396,9 @@ def question_table(results: Sequence[Result]) -> str:
         "|---|---|---|---|---|---|---|---|---|",
     ]
     for r in results:
-        if r.error:
+        if not r.asked:
+            outcome = "not asked"
+        elif r.error:
             outcome = f"error: {r.error}"
         elif r.answered:
             outcome = "answered"
@@ -413,7 +418,9 @@ def answers_section(results: Sequence[Result], questions: Sequence[Question]) ->
     text_by_id = {q.id: q.question for q in questions}
     blocks = []
     for r in results:
-        body = r.answer or (f"*Refused ({r.refusal}).*" if r.refusal else f"*{r.error}*")
+        if not r.asked:
+            continue
+        body = r.answer or (f"*Refused ({r.refusal}).*" if r.refusal else f"*Error: {r.error}*")
         blocks.append(f"**{r.id}.** {text_by_id[r.id]}\n\n> {body}")
     return "\n\n".join(blocks)
 
