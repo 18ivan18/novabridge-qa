@@ -26,7 +26,7 @@
     "sha256": "ed4f884d4ca78c082309ed66a9c0489f0b3543b7e96f797b363c74956896c8a7"
   },
   {
-    "company": "MICROSOFT CORP",
+    "company": "Microsoft Corporation",
     "ticker": "MSFT",
     "cik": "0000789019",
     "form": "10-K",
@@ -39,7 +39,7 @@
     "sha256": "fb187c7e00cac81ea66b63be5ec25a745aaef9bc36d3d1cf6c03162356854e85"
   },
   {
-    "company": "MICROSOFT CORP",
+    "company": "Microsoft Corporation",
     "ticker": "MSFT",
     "cik": "0000789019",
     "form": "10-K",
@@ -52,7 +52,7 @@
     "sha256": "48f57672fb310d3ea5736bda4067d701a34dff2d2d01cb82f477462500bf4be4"
   },
   {
-    "company": "NVIDIA CORP",
+    "company": "NVIDIA Corporation",
     "ticker": "NVDA",
     "cik": "0001045810",
     "form": "10-K",
@@ -65,7 +65,7 @@
     "sha256": "5f16e34c2c3e8f9f8aa8ee4237226dd50d6b40f1b75bbcdee01573d3ae30bf8e"
   },
   {
-    "company": "NVIDIA CORP",
+    "company": "NVIDIA Corporation",
     "ticker": "NVDA",
     "cik": "0001045810",
     "form": "10-K405",
