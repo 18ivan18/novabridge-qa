@@ -17,8 +17,8 @@ import { Label } from "@/components/ui/label";
 import type { UploadQueue } from "@/hooks/useUploadQueue";
 import { DOC_TYPES, docTypeLabel, plural } from "@/lib/format";
 
-// HTML and PDF join these when their loaders arrive in M8b.
-const ACCEPTED = ".txt,.md";
+// Mirrors the backend's loaders. PDF joins these when its loader arrives.
+const ACCEPTED = ".txt,.md,.htm,.html";
 
 const FIELD_LABEL = "text-[13px] font-normal text-muted-foreground";
 const FIELD_INPUT = "h-11 rounded-lg border-input bg-card";
@@ -107,7 +107,7 @@ export function UploadDialog({ open, onOpenChange, queue }: UploadDialogProps) {
               className="sr-only"
             />
           </label>
-          <p className="text-[13px] text-muted-foreground">TXT or Markdown · up to 20 MB each</p>
+          <p className="text-[13px] text-muted-foreground">TXT, Markdown or HTML · up to 20 MB each</p>
         </div>
 
         <fieldset className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3">

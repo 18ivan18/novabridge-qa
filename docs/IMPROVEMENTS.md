@@ -19,7 +19,8 @@ Work through these in order. Each task is written so an agent can start it cold.
 
 ## Checklist
 
-- [ ] 1. HTML loader, and index the 2026 10-Ks (M8b, part 1)
+- [x] 1. HTML loader, and index the 2026 10-Ks (M8b, part 1). Branch `feat/html-loader`. Ivan
+      approved the new questions and tried them in the UI.
 - [ ] 2. End-to-end answer evaluation
 - [ ] 3. Every figure in an answer must appear in a passage it cites
 - [ ] 4. Cross-encoder re-ranker

@@ -68,7 +68,7 @@ The brief explicitly says: *"This task tests your judgment and ability to verify
 | D6 | **Vector store: ChromaDB** (persistent, embedded) | Zero ops, stores text + metadata, good enough for thousands of chunks. Chroma is the **single source of truth** for chunks; the BM25 index is derived from it and can be rebuilt. |
 | D7 | **Citations checked on the server** | Passages are numbered `[1]..[k]` in the prompt; the model must cite `[n]`. The server parses citations, drops numbers that don't exist, renumbers the rest in order of first appearance, and returns only cited passages as `sources`. Zero valid citations → treated as insufficient evidence. |
 | D8 | **"Not enough evidence" path** has two layers | (a) Retrieval gate: if the best dense cosine similarity < `MIN_RELEVANCE` (tuned on the eval set), the LLM is not called. (b) The model is told to reply exactly `INSUFFICIENT_EVIDENCE` if the passages don't answer the question. Either case returns `insufficient_evidence: true`. |
-| D9 | **Corpus: SEC EDGAR 10-K filings** for Apple, Microsoft and NVIDIA (latest annual report each) | Real, relevant, and US government filings are public domain, so they can be committed. EDGAR requires a descriptive `User-Agent` with contact info: read it from `SEC_USER_AGENT` in `.env`, never hard-code it. **First runs use their newest plain-text annual reports** (FY2000–2001, the last before EDGAR moved to HTML): real `.txt` filings needing no conversion. The current HTML 10-Ks replace them once M8b lands. |
+| D9 | **Corpus: SEC EDGAR 10-K filings** for Apple, Microsoft and NVIDIA (latest annual report each) | Real, relevant, and US government filings are public domain, so they can be committed. EDGAR requires a descriptive `User-Agent` with contact info: read it from `SEC_USER_AGENT` in `.env`, never hard-code it. **First runs use their newest plain-text annual reports** (FY2000–2001, the last before EDGAR moved to HTML): real `.txt` filings needing no conversion. Since M8b part 1 the current HTML 10-Ks are indexed **beside** them, not instead: both generations stay, and answers name the period of each figure (see `backend/eval/decisions.md`). |
 | D10 | **Document upload** from the UI | `POST /api/documents` (multipart). Indexing runs as a background job; the UI polls job status. Formats arrive gradually: **TXT and Markdown first** (M2, M8), then HTML, then PDF (text layer only, **no OCR**) in M8b. Max 20 MB. |
 | D11 | **Frontend: Vite + React + TypeScript, shadcn/ui, TanStack Query** | shadcn/ui components are copied into the repo, so they stay readable and restylable to match `docs/design/` through the design tokens. TanStack Query handles request state and job polling, replacing hand-written loading/error/polling code. Trade-off: Tailwind and Radix become dependencies. |
 | D12 | **Python 3.12, uv, ruff, mypy, pytest** | Modern standard tooling; `uv.lock` makes installs reproducible. |
@@ -280,7 +280,7 @@ novabridge-qa/
 │   │   │   ├── routes_documents.py
 │   │   │   └── routes_health.py
 │   │   ├── ingestion/
-│   │   │   ├── loaders.py        # load_html / load_pdf / load_text → (text, page_spans)
+│   │   │   ├── loaders/          # one module per format (text, html; pdf next) + suffix registry
 │   │   │   ├── sections.py       # 10-K "Item X" section detection
 │   │   │   ├── chunking.py
 │   │   │   ├── pipeline.py       # ingest_file(path, meta) -> Document
@@ -374,6 +374,8 @@ from EDGAR (respect `SEC_USER_AGENT`, rate-limit politely), saves the primary do
 `loaders.py` for TXT/MD only, `sections.py`, `chunking.py`, all unit-tested with synthetic fixtures. The TXT loader
 strips EDGAR's SGML markup (`<DOCUMENT>`, `<PAGE>`, `<S>`, `<C>`…); section detection skips table-of-contents
 entries. HTML and PDF loaders come later (M8b); keep the loader interface ready for them.
+*(Done: `ingestion/loaders/` is a package with one `bytes -> LoadedDocument` function per format,
+registered by suffix in `LOADERS`.)*
 ✅ Running the pipeline on the three plain-text filings prints a stats table (chunks per doc and section, token distribution);
 Ivan spot-checks 5 random chunks.
 

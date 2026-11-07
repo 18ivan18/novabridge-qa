@@ -4,12 +4,15 @@ import re
 import string
 from dataclasses import dataclass
 
+from novabridge_qa.ingestion.loaders.base import CELL_SEPARATOR
+
 FRONT_MATTER = "Front matter"
 
 # Case-sensitive on purpose: both styles occur in filings, but lowercase "item 7." is prose.
 # The required period excludes cross-references such as "see Item 7 of this Form 10-K".
 _HEADING = re.compile(r"^[ \t]*(?:ITEM|Item)[ \t]+(\d{1,2}[A-Ca-c]?)\.[ \t]*(.*)$", re.MULTILINE)
 _DOT_LEADER = re.compile(r"\.{4,}")
+_FORM_NAME = re.compile(r"\b(\d+)-k\b")
 # Headings shorter than this cannot have wrapped, so their next line is body text.
 _MIN_WRAPPED_TITLE = 50
 
@@ -35,7 +38,7 @@ def _clean_title(first_line: str, next_line: str) -> str:
     title = " ".join(title.split()).rstrip(". ")
     if title.isupper():
         # capwords lowercases everything after the first letter, which breaks "Form 8-K".
-        title = string.capwords(title).replace("8-k", "8-K")
+        title = _FORM_NAME.sub(r"\1-K", string.capwords(title))
     return title
 
 
@@ -43,11 +46,14 @@ def detect_sections(text: str) -> list[Section]:
     """Split text at its `Item N.` headings, or return one untitled section if it has none.
 
     A table-of-contents entry has a dot leader on its own line or, when wrapped, on the next one.
+    In HTML filings the table of contents is a table, so a line holding a cell separator is skipped.
     If an item still repeats, the first one is kept: it is the heading, later ones are references.
     """
     headings: dict[str, tuple[int, str]] = {}
     for match in _HEADING.finditer(text):
         first_line = match[2]
+        if CELL_SEPARATOR in first_line:
+            continue
         next_line = _next_line(text, match.end())
         if _DOT_LEADER.search(first_line) or _DOT_LEADER.search(next_line):
             continue

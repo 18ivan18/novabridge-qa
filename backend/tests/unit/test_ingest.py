@@ -99,10 +99,11 @@ def test_header_is_embedded_but_stored_text_stays_verbatim(filing: Path, tmp_pat
 
 def test_load_corpus_lists_only_formats_with_a_loader(tmp_path: Path) -> None:
     common = {"company": "ACME Corp", "ticker": "ACME", "form": "10-K", "period_end": "2025-01-31"}
-    entries = [{**common, "filename": "a.txt"}, {**common, "filename": "a.htm"}]
+    names = ["a.txt", "a.HTM", "a.pdf"]
+    entries = [{**common, "filename": name} for name in names]
     (tmp_path / "manifest.json").write_text(json.dumps(entries))
 
-    assert [path.name for path, _ in load_corpus(tmp_path)] == ["a.txt"]
+    assert [path.name for path, _ in load_corpus(tmp_path)] == ["a.txt", "a.HTM"]
 
 
 def test_document_meta_maps_10k405_to_10k() -> None:

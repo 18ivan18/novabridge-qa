@@ -1,10 +1,8 @@
-"""Turn a raw file into plain text. TXT and Markdown for now; HTML and PDF arrive in M8b."""
+"""Plain text and Markdown, including EDGAR's SGML-wrapped text filings."""
 
 import re
-from dataclasses import dataclass, field
-from pathlib import Path
 
-SUPPORTED_SUFFIXES = frozenset({".txt", ".md"})
+from novabridge_qa.ingestion.loaders.base import LoadedDocument
 
 # Metadata lines that open an EDGAR document, such as "<FILENAME>d10k.txt".
 _EDGAR_HEADER_LINE = re.compile(r"^<(?:TYPE|SEQUENCE|FILENAME|DESCRIPTION)>.*\n?", re.MULTILINE)
@@ -15,29 +13,6 @@ _PAGE_NUMBER = re.compile(r"^[ \t]+\d{1,3}[ \t]*\n\s*(?=<(?:PAGE|/TEXT)>)", re.M
 _RULE_LINE = re.compile(r"^[ \t]*[-=_]{3,}[-=_ \t]*$", re.MULTILINE)
 _TRAILING_SPACE = re.compile(r"[ \t]+$", re.MULTILINE)
 _EXTRA_BLANK_LINES = re.compile(r"\n{3,}")
-
-
-class UnsupportedFormatError(ValueError):
-    """The file type has no loader."""
-
-
-class NoTextError(ValueError):
-    """The file loaded but holds no text."""
-
-
-@dataclass(frozen=True)
-class PageSpan:
-    """Where a page starts and ends in the loaded text. Only PDFs will have these."""
-
-    page: int
-    char_start: int
-    char_end: int
-
-
-@dataclass(frozen=True)
-class LoadedDocument:
-    text: str
-    page_spans: tuple[PageSpan, ...] = field(default=())
 
 
 def decode_text(raw: bytes) -> str:
@@ -63,14 +38,8 @@ def strip_edgar_markup(text: str) -> str:
     return _EXTRA_BLANK_LINES.sub("\n\n", text).strip()
 
 
-def load_text(path: Path) -> LoadedDocument:
-    text = decode_text(path.read_bytes())
+def load_text(raw: bytes) -> LoadedDocument:
+    text = decode_text(raw)
     if text.lstrip().startswith("<DOCUMENT>"):
         text = strip_edgar_markup(text)
     return LoadedDocument(text=text)
-
-
-def load_file(path: Path) -> LoadedDocument:
-    if path.suffix.lower() not in SUPPORTED_SUFFIXES:
-        raise UnsupportedFormatError(f"Unsupported file type: {path.suffix or path.name}")
-    return load_text(path)

@@ -5,10 +5,12 @@ description = "NovaBridge financial analyst Q&A assistant: grounded answers with
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "anthropic>=2.6.0",
+    "beautifulsoup4>=4.15.0",
     "bm25s>=0.3.16",
     "chromadb>=1.5.9",
     "fastapi>=0.162.0",
     "fastembed>=0.9.1",
+    "lxml>=6.1.3",
     "openai>=3.46.0",
     "pydantic>=2",
     "pydantic-settings>=2.16.2",

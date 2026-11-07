@@ -107,6 +107,25 @@ def test_uploads_can_be_searched_on_their_own(harness: Harness) -> None:
     assert harness.retriever.search("blacksmiths", 3, filings_only) == []
 
 
+def test_html_upload_is_indexed_without_its_markup(harness: Harness) -> None:
+    page = b"<html><body><div>" + TEXT + b"</div><script>var hidden = 1;</script></body></html>"
+
+    job = harness.job(harness.upload(page, name="report.html").json()["job_id"])
+
+    assert job["status"] == "indexed"
+    [passage] = harness.retriever.search("blacksmiths", 1, mode="sparse")
+    assert "<div>" not in passage.chunk.text
+    assert "hidden" not in passage.chunk.text
+
+
+def test_html_with_only_hidden_text_is_rejected_at_once(harness: Harness) -> None:
+    page = b'<html><body><div style="display:none">' + TEXT + b"</div></body></html>"
+
+    response = harness.upload(page, name="report.htm")
+
+    assert response.status_code == 422
+
+
 def test_markdown_and_uppercase_suffixes_are_accepted(harness: Harness) -> None:
     assert harness.upload(name="NOTES.MD").status_code == 202
 
@@ -161,12 +180,12 @@ def test_file_at_the_limit_is_accepted(harness: Harness) -> None:
     assert harness.upload((TEXT * 10)[:MAX_BYTES]).status_code == 202
 
 
-@pytest.mark.parametrize("name", ["report.pdf", "page.html", "archive.txt.zip", "noextension"])
+@pytest.mark.parametrize("name", ["report.pdf", "archive.txt.zip", "noextension"])
 def test_unsupported_type_is_rejected(harness: Harness, name: str) -> None:
     response = harness.upload(name=name)
 
     assert response.status_code == 415
-    assert ".md, .txt" in response.json()["detail"]
+    assert ".htm, .html, .md, .txt" in response.json()["detail"]
 
 
 def test_file_with_no_text_is_rejected_at_once(harness: Harness) -> None:

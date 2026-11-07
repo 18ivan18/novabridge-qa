@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from novabridge_qa.domain.models import DocType, DocumentMeta
-from novabridge_qa.ingestion.loaders import SUPPORTED_SUFFIXES
+from novabridge_qa.ingestion.loaders import is_supported
 
 # 10-K405 was a variant of the 10-K, so analysts should find it under the same filter.
 _DOC_TYPE_BY_FORM = {"10-K405": "10-K"}
@@ -26,10 +26,10 @@ def document_meta(entry: dict[str, Any]) -> DocumentMeta:
 
 
 def load_corpus(raw_dir: Path) -> list[tuple[Path, DocumentMeta]]:
-    """List the manifest's files that have a loader. Others wait for their format's milestone."""
+    """List the manifest's files that have a loader. Others wait until their format has one."""
     entries = json.loads((raw_dir / "manifest.json").read_text())
     return [
         (raw_dir / entry["filename"], document_meta(entry))
         for entry in entries
-        if Path(entry["filename"]).suffix in SUPPORTED_SUFFIXES
+        if is_supported(entry["filename"])
     ]

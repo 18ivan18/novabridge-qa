@@ -1,11 +1,8 @@
-// Taken from eval/questions.jsonl, so they match the indexed filings: the first two have answers
-// in the library and the last shows the no-evidence path.
+// The first is eval question a23, answered from a 2026 table. The second has no year, so its answer
+// covers both generations of filings. The last (u08) shows the no-evidence path.
 const EXAMPLES = [
-  {
-    tag: "AAPL · 10-K",
-    question: "What happens to Apple if a key component only available from one vendor is delayed?",
-  },
-  { tag: "NVDA · 10-K", question: "Who are NVIDIA's largest customers?" },
+  { tag: "AAPL · 10-K 2026", question: "How much revenue did Apple earn from the iPhone in 2026?" },
+  { tag: "AAPL · 2000 AND 2026", question: "What were Apple's total net sales?" },
   { tag: "NOT IN LIBRARY", question: "What was Tesla's revenue last year?" },
 ];
 

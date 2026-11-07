@@ -12,7 +12,7 @@ import json
 import sys
 import time
 from collections.abc import Iterable, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +25,13 @@ COMPANIES = {
     "AAPL": "0000320193",
     "MSFT": "0000789019",
     "NVDA": "0001045810",
+}
+# EDGAR lists some names in capitals ("MICROSOFT CORP"). These are the names the filings use in
+# their own text, so the library shows them consistently.
+DISPLAY_NAMES = {
+    "AAPL": "Apple Inc.",
+    "MSFT": "Microsoft Corporation",
+    "NVDA": "NVIDIA Corporation",
 }
 # 10-K405 was a 10-K variant, discontinued in 2003. NVIDIA's plain-text filing uses it.
 PLAIN_TEXT_FORMS = ("10-K", "10-K405")
@@ -143,7 +150,8 @@ def main() -> None:
                     older_blocks=older_blocks,
                 ),
             ]
-            for filing in filings:
+            for found in filings:
+                filing = replace(found, company=DISPLAY_NAMES[ticker])
                 content = fetch(client, filing.source_url).content
                 (raw_dir / filing.filename).write_bytes(content)
                 entries.append(manifest_entry(filing, content))
