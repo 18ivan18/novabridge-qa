@@ -100,15 +100,23 @@ flowchart TD
 
 ## Retrieval evaluation
 
-`backend/eval/run_eval.py` runs 21 answerable and 8 unanswerable questions written for these filings.
-Recall@k is the share of answerable questions whose evidence is in the top k passages. At the chosen
-400 tokens:
+`backend/eval/run_eval.py` runs 45 answerable and 8 unanswerable questions written for these
+filings: 21 on the fiscal 2000–2001 TXT filings and 24 on the 2026 HTML ones. Recall@k is the
+share of answerable questions whose evidence, from the filing the question names, is in the top k
+passages. All six filings are indexed. At the chosen 400 tokens:
 
-| Mode | R@1 | R@3 | R@6 | R@10 | MRR |
-|---|---|---|---|---|---|
-| **Hybrid** | 0.52 | 0.71 | 0.86 | 0.86 | 0.647 |
-| Dense | 0.38 | 0.67 | 0.76 | 0.81 | 0.535 |
-| BM25 | 0.29 | 0.57 | 0.76 | 0.90 | 0.470 |
+| Mode | Questions | R@1 | R@3 | R@6 | R@10 | MRR |
+|---|---|---|---|---|---|---|
+| **Hybrid** | TXT filings | 0.33 | 0.62 | 0.76 | 0.81 | 0.496 |
+| **Hybrid** | HTML filings | 0.58 | 0.79 | 0.83 | 0.83 | 0.684 |
+| Dense | TXT filings | 0.33 | 0.57 | 0.71 | 0.76 | 0.484 |
+| Dense | HTML filings | 0.54 | 0.71 | 0.75 | 0.88 | 0.642 |
+| BM25 | TXT filings | 0.24 | 0.38 | 0.52 | 0.71 | 0.361 |
+| BM25 | HTML filings | 0.29 | 0.71 | 0.75 | 0.79 | 0.487 |
+
+With only the TXT filings indexed, hybrid R@6 on the same 21 questions was 0.86 (MRR 0.647). The
+2026 filings answer some of the same questions for another year, which pushes the old evidence down.
+The 2026 questions are not yet approved, and nothing has been tuned on them.
 
 **Tuned:** `CHUNK_TOKENS` stayed at 400, `TOP_K` at 6 and `MIN_RELEVANCE` became 0.58. Adding the
 indexing header raised hybrid R@6 from 0.76 to 0.86.
@@ -118,8 +126,8 @@ the same questions guided the tuning, so the scores are optimistic. Hybrid is a 
 than a clear win: at 200 tokens dense scored higher. Details are in
 [results.md](backend/eval/results.md) and [decisions.md](backend/eval/decisions.md).
 
-End to end with `openai/gpt-oss-120b` on Groq, 18 of 21 answerable questions were answered with the
-expected evidence cited. The other 3 are the retrieval misses, and the model correctly declined them
+Before the HTML filings were indexed, end to end with `openai/gpt-oss-120b` on Groq, 18 of 21
+answerable questions were answered with the expected evidence cited. The other 3 are the retrieval misses, and the model correctly declined them
 rather than guessing. All 8 unanswerable questions were refused. This was a single run checked by
 script, not by reading each answer against the filings.
 
@@ -135,8 +143,9 @@ script, not by reading each answer against the filings.
 
 - A citation proves that the passage was retrieved, not that it supports the sentence. The analyst
   still has to check, which is why the sources sit beside the answer.
-- The gate only stops off-topic questions (highest score 0.491). In-domain unanswerable questions
-  score up to 0.777, above the median answerable one, so they depend on the model refusing.
+- The gate only stops off-topic questions (highest score 0.528 against the 0.58 threshold).
+  In-domain unanswerable questions score up to 0.716, above the lowest answerable one (0.665), so
+  no threshold separates them and they depend on the model refusing.
 - A document's false claims can reach an answer. In a test, instructions planted in a passage were
   ignored, but a planted figure was still reported as a conflict with the true one, cited to its real
   passage. It stays traceable, but no prompt can tell a false document from a true one
@@ -144,11 +153,15 @@ script, not by reading each answer against the filings.
 
 ## Limitations and next steps
 
-- **Old filings:** the index holds fiscal 2000–2001 10-Ks in plain text. The 2026 10-Ks are in
-  `backend/data/raw/` but are not indexed until the HTML loader exists.
-- **Formats:** TXT and Markdown only. HTML and PDF loaders come next, then OCR.
+- **Two generations of filings:** the index holds each company's fiscal 2000–2001 10-K (plain text)
+  and its 2026 10-K (HTML). A question without a year can get both, with the period of each figure
+  stated. There is no period filter yet.
+- **Formats:** TXT, Markdown and HTML (inline XBRL included). PDF comes next, then OCR.
+- **Updating an existing Docker install:** the filings are copied into the `data` volume only when
+  it is empty, so an older volume keeps its old manifest. Run `docker compose down -v` once.
 - **Embedders:** a comparison of `bge-small` with Qwen3-0.6B and harrier-0.6b is planned.
-- **Tables:** a table's header can land in a different chunk from its rows.
+- **Tables:** in HTML a table is kept in one chunk when it fits (88% of them). A longer table, and
+  most tables in the TXT filings, can lose the header row in later chunks.
 - **Uploads:** they have no ticker, so they appear under "My uploads", not under a company.
 - **Rate limits:** Groq's free tier allows roughly 2–3 questions a minute at about 3,000 tokens each,
   and has a daily token cap too. Once it is used up, questions fail with a friendly message until it
@@ -164,7 +177,7 @@ cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy
 cd frontend && npm run lint && npm run typecheck && npm test
 ```
 
-- **Backend (260 tests):** chunking, sections, RRF, citations, prompts, settings, the QA service with
+- **Backend (283 tests):** loaders (TXT and HTML), chunking, sections, RRF, citations, prompts, settings, the QA service with
   fakes, and the API through `TestClient`. No network or API keys needed.
 - **Frontend (29 tests):** citation rendering, API client errors and upload queue state. These are
   deliberately few. The full flow was checked by hand-written scripts in a real browser rather than
