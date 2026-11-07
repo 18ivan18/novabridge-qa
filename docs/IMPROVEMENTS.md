@@ -10,7 +10,7 @@ Work through these in order. Each task is written so an agent can start it cold.
 - One task per branch, with small conventional commits. Run both check commands from `CLAUDE.md`
   before each commit.
 - Measure, do not assume. Retrieval changes are judged with `backend/eval/run_eval.py` (and with the
-  answer eval from task 5 once it exists). Put before-and-after numbers in the pull request.
+  answer eval from task 2 once it exists). Put before-and-after numbers in the pull request.
 - Run the real flow, not only the tests. Fakes have hidden real bugs here before: the `【1】` citation
   format, the dialog focus and the dark-mode styles were all missed by passing tests.
 - Mind the LLM budget. Groq's free tier allows about 8,000 tokens a minute and also has a daily cap.
@@ -20,10 +20,10 @@ Work through these in order. Each task is written so an agent can start it cold.
 ## Checklist
 
 - [ ] 1. HTML loader, and index the 2026 10-Ks (M8b, part 1)
-- [ ] 2. Every figure in an answer must appear in a passage it cites
-- [ ] 3. Cross-encoder re-ranker
-- [ ] 4. Embedder comparison (M8c)
-- [ ] 5. End-to-end answer evaluation
+- [ ] 2. End-to-end answer evaluation
+- [ ] 3. Every figure in an answer must appear in a passage it cites
+- [ ] 4. Cross-encoder re-ranker
+- [ ] 5. Embedder comparison (M8c)
 - [ ] 6. Streaming answers over SSE
 - [ ] 7. Highlight the exact supporting sentence
 - [ ] 8. PDF loader (M8b, part 2)
@@ -70,7 +70,31 @@ down.
 
 ---
 
-## 2. Every figure in an answer must appear in a passage it cites
+## 2. End-to-end answer evaluation
+
+**Why:** `run_eval.py` measures retrieval only. The answer-level numbers in the README come from a
+one-off script that is not in the repository, checked by pattern rather than by reading.
+
+**Scope:** a repeatable script, `eval/run_answer_eval.py`, that runs every question through
+`QAService` with the real LLM and reports:
+- **Answered:** answerable questions that got an answer.
+- **Correct:** the answer contains the expected fact. Add an expected-answer field to the questions
+  file, as text or a pattern, checked against the filing.
+- **Evidence cited:** the passage with the evidence is among the sources.
+- **Correct refusals:** unanswerable questions that got no answer, split into refused by the gate
+  and refused by the model.
+- **Figure check:** sentences flagged by task 3, once it exists.
+- Latency and tokens used.
+
+It must pace itself under the rate limit, save raw outputs so a run can be read again without
+re-asking, and write a results file to commit.
+
+**Done when:** a run on both corpora is committed, and the README's evaluation section uses it
+instead of the one-off numbers.
+
+---
+
+## 3. Every figure in an answer must appear in a passage it cites
 
 **Why:** citation validation proves that a cited passage was retrieved, not that it supports the
 sentence. A deterministic check on figures closes the most damaging case for financial answers: a
@@ -111,7 +135,7 @@ guarantee" section is updated with what it now catches and what it still misses.
 
 ---
 
-## 3. Cross-encoder re-ranker
+## 4. Cross-encoder re-ranker
 
 **Why:** RRF only combines two rankings. A cross-encoder reads the question and the passage
 together, which usually ranks the evidence higher. Hybrid R@1 is 0.52 today, so the answer is often
@@ -142,7 +166,7 @@ the decision is recorded in `eval/decisions.md`, including "not worth it" if tha
 
 ---
 
-## 4. Embedder comparison (M8c)
+## 5. Embedder comparison (M8c)
 
 **Why:** `bge-small-en-v1.5` was chosen to get the system working. Dense search alone has an R@6 of
 0.76 at 400 tokens.
@@ -166,36 +190,12 @@ choice and why.
 
 ---
 
-## 5. End-to-end answer evaluation
-
-**Why:** `run_eval.py` measures retrieval only. The answer-level numbers in the README come from a
-one-off script that is not in the repository, checked by pattern rather than by reading.
-
-**Scope:** a repeatable script, `eval/run_answer_eval.py`, that runs every question through
-`QAService` with the real LLM and reports:
-- **Answered:** answerable questions that got an answer.
-- **Correct:** the answer contains the expected fact. Add an expected-answer field to the questions
-  file, as text or a pattern, checked against the filing.
-- **Evidence cited:** the passage with the evidence is among the sources.
-- **Correct refusals:** unanswerable questions that got no answer, split into refused by the gate
-  and refused by the model.
-- **Figure check:** sentences flagged by task 2, once it exists.
-- Latency and tokens used.
-
-It must pace itself under the rate limit, save raw outputs so a run can be read again without
-re-asking, and write a results file to commit.
-
-**Done when:** a run on both corpora is committed, and the README's evaluation section uses it
-instead of the one-off numbers.
-
----
-
 ## 6. Streaming answers over SSE
 
 **Why:** the answer appears all at once after generation. Streaming shows text within a second or so.
 
 **This conflicts with server-side checking.** Citations are validated and renumbered after the whole
-answer exists (D7), and task 2 checks every sentence. Streamed text cannot be checked before it is
+answer exists (D7), and task 3 checks every sentence. Streamed text cannot be checked before it is
 sent. Choose one, and write the choice into D7:
 - Stream the raw text as a preview, then send a final event with the checked answer that replaces
   it. Simple, but the user may see a citation or sentence disappear.
@@ -223,7 +223,7 @@ supporting sentence themselves.
 
 **Scope:**
 - For each cited sentence of the answer, find the sentence in the passage that best supports it.
-  Start with something deterministic: shared figures (from task 2) and word overlap. Embedding
+  Start with something deterministic: shared figures (from task 3) and word overlap. Embedding
   similarity with the existing embedder is the fallback. Do not ask the LLM for quotes unless the
   deterministic approach measurably fails.
 - Return the matching character ranges in the API, and highlight them in `SourceCard.tsx`, scrolling
@@ -277,7 +277,7 @@ worker.
 
 ## 10. LLM-as-judge
 
-**Why:** task 5 checks facts by pattern, which cannot judge whether an answer is faithful to its
+**Why:** task 2 checks facts by pattern, which cannot judge whether an answer is faithful to its
 sources overall, or whether a refusal was right.
 
 **Scope:**
@@ -288,7 +288,7 @@ sources overall, or whether a refusal was right.
   report how often they agree.
 - It runs in evaluation only, never on users' requests, so it adds no latency to the app.
 
-**Note:** task 2 already catches unsupported figures deterministically. The judge is for what rules
+**Note:** task 3 already catches unsupported figures deterministically. The judge is for what rules
 cannot catch, so it should not replace the figure check.
 
 **Done when:** the judge's scores and its agreement with the hand grades are in the evaluation
