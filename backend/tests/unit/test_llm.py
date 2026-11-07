@@ -10,7 +10,7 @@ from pydantic import SecretStr
 
 from novabridge_qa.config import Settings
 from novabridge_qa.llm.anthropic_client import AnthropicClient
-from novabridge_qa.llm.base import MAX_RETRIES, ChatMessage, LLMError
+from novabridge_qa.llm.base import MAX_RETRIES, ChatMessage, Completion, LLMError, RateLimitError
 from novabridge_qa.llm.factory import build_llm
 from novabridge_qa.llm.fake import FakeLLM
 from novabridge_qa.llm.openai_compatible import OpenAICompatibleClient
@@ -57,13 +57,17 @@ def anthropic_status_error(status: int) -> anthropic.APIStatusError:
     return anthropic.APIStatusError(f"Bad key: {SECRET}", response=response, body=None)
 
 
-def openai_reply(content: str | None, finish_reason: str = "stop") -> SimpleNamespace:
+def openai_reply(
+    content: str | None, finish_reason: str = "stop", usage: SimpleNamespace | None = None
+) -> SimpleNamespace:
     message = SimpleNamespace(content=content)
-    return SimpleNamespace(choices=[SimpleNamespace(message=message, finish_reason=finish_reason)])
+    choice = SimpleNamespace(message=message, finish_reason=finish_reason)
+    return SimpleNamespace(choices=[choice], usage=usage)
 
 
 def anthropic_reply(*blocks: SimpleNamespace, stop_reason: str = "end_turn") -> SimpleNamespace:
-    return SimpleNamespace(content=list(blocks), stop_reason=stop_reason)
+    usage = SimpleNamespace(input_tokens=120, output_tokens=8)
+    return SimpleNamespace(content=list(blocks), stop_reason=stop_reason, usage=usage)
 
 
 def text_block(text: str) -> SimpleNamespace:
@@ -88,7 +92,7 @@ def test_openai_puts_system_first_and_sends_temperature() -> None:
     client = make_openai()
     captured = fake_create(client, openai_reply("answer"))
 
-    assert client.complete("be brief", MESSAGES, max_tokens=50) == "answer"
+    assert client.complete("be brief", MESSAGES, max_tokens=50).text == "answer"
 
     assert captured["messages"][0] == {"role": "system", "content": "be brief"}
     assert [m["role"] for m in captured["messages"][1:]] == ["user", "assistant", "user"]
@@ -101,7 +105,7 @@ def test_anthropic_uses_the_system_parameter_and_sends_no_temperature() -> None:
     client = make_anthropic()
     captured = fake_create(client, anthropic_reply(text_block("answer")))
 
-    assert client.complete("be brief", MESSAGES, max_tokens=50) == "answer"
+    assert client.complete("be brief", MESSAGES, max_tokens=50).text == "answer"
 
     assert captured["system"] == "be brief"
     assert all(m["role"] != "system" for m in captured["messages"])
@@ -130,7 +134,32 @@ def test_anthropic_ignores_thinking_blocks() -> None:
     thinking = SimpleNamespace(type="thinking", thinking="hmm")
     fake_create(client, anthropic_reply(thinking, text_block("part 1 "), text_block("part 2")))
 
-    assert client.complete("s", MESSAGES, max_tokens=50) == "part 1 part 2"
+    assert client.complete("s", MESSAGES, max_tokens=50).text == "part 1 part 2"
+
+
+# Token usage
+
+
+def test_openai_reports_token_usage() -> None:
+    client = make_openai()
+    usage = SimpleNamespace(prompt_tokens=120, completion_tokens=8)
+    fake_create(client, openai_reply("answer", usage=usage))
+
+    assert client.complete("s", MESSAGES, max_tokens=50) == Completion("answer", 120, 8)
+
+
+def test_openai_usage_is_none_when_the_provider_omits_it() -> None:
+    client = make_openai()
+    fake_create(client, openai_reply("answer"))
+
+    assert client.complete("s", MESSAGES, max_tokens=50) == Completion("answer", None, None)
+
+
+def test_anthropic_reports_token_usage() -> None:
+    client = make_anthropic()
+    fake_create(client, anthropic_reply(text_block("answer")))
+
+    assert client.complete("s", MESSAGES, max_tokens=50) == Completion("answer", 120, 8)
 
 
 @pytest.mark.parametrize(
@@ -195,6 +224,16 @@ def test_anthropic_status_errors_are_normalized(status: int, message: str) -> No
     assert isinstance(caught.value.__cause__, anthropic.APIStatusError)
 
 
+def test_rate_limits_raise_a_distinct_error() -> None:
+    for client, error in [
+        (make_openai(), openai_status_error(429)),
+        (make_anthropic(), anthropic_status_error(429)),
+    ]:
+        fake_create(client, error)
+        with pytest.raises(RateLimitError):
+            client.complete("s", MESSAGES, max_tokens=50)
+
+
 def test_timeouts_and_connection_errors_are_normalized() -> None:
     openai_request = httpx.Request("POST", "http://llm.test")
     anthropic_request = httpx2.Request("POST", "http://llm.test")
@@ -252,13 +291,14 @@ def test_factory_requires_a_model_for_anthropic() -> None:
 
 
 def test_fake_llm_replays_its_script_and_records_calls() -> None:
-    llm = FakeLLM(["one", LLMError("boom")])
+    llm = FakeLLM(["one", Completion("two", 10, 2), LLMError("boom")])
 
-    assert llm.complete("s", MESSAGES, max_tokens=5) == "one"
+    assert llm.complete("s", MESSAGES, max_tokens=5) == Completion("one")
+    assert llm.complete("s", MESSAGES, max_tokens=5) == Completion("two", 10, 2)
     with pytest.raises(LLMError, match="boom"):
         llm.complete("s", MESSAGES, max_tokens=5)
 
-    assert len(llm.calls) == 2
+    assert len(llm.calls) == 3
     assert llm.calls[0].system == "s"
 
 

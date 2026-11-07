@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from novabridge_qa.domain.models import Chunk, Document, ScoredPassage, SearchFilters
-from novabridge_qa.llm.base import LLMError
+from novabridge_qa.llm.base import Completion, LLMError
 from novabridge_qa.llm.fake import FakeLLM
 from novabridge_qa.qa.prompt import SYSTEM_PROMPT
 from novabridge_qa.qa.service import Answer, QAService
@@ -44,7 +44,9 @@ class StubRetriever:
         return self.passages[:k]
 
 
-def make_service(passages: Sequence[ScoredPassage], *replies: str | Exception) -> QAService:
+def make_service(
+    passages: Sequence[ScoredPassage], *replies: str | Completion | Exception
+) -> QAService:
     return QAService(
         StubRetriever(list(passages)),
         FakeLLM(list(replies)),
@@ -54,8 +56,9 @@ def make_service(passages: Sequence[ScoredPassage], *replies: str | Exception) -
     )
 
 
-def assert_no_answer(answer: Answer, retrieved: int) -> None:
+def assert_no_answer(answer: Answer, retrieved: int, refusal: str) -> None:
     assert answer.insufficient_evidence
+    assert answer.refusal == refusal
     assert answer.text == ""
     assert answer.sources == ()
     assert len(answer.retrieved) == retrieved
@@ -91,11 +94,11 @@ def test_invalid_citations_are_logged(caplog: pytest.LogCaptureFixture) -> None:
 def test_no_valid_citations_means_insufficient_evidence() -> None:
     answer = make_service([passage(1)], "Made up [7].").ask("?")
 
-    assert_no_answer(answer, 1)
+    assert_no_answer(answer, 1, "no_citations")
 
 
 def test_uncited_text_is_not_returned() -> None:
-    assert_no_answer(make_service([passage(1)], "Anvils sell well.").ask("?"), 1)
+    assert_no_answer(make_service([passage(1)], "Anvils sell well.").ask("?"), 1, "no_citations")
 
 
 def test_a_discarded_reply_is_logged(caplog: pytest.LogCaptureFixture) -> None:
@@ -116,8 +119,9 @@ def test_retrieval_gate_does_not_call_the_llm() -> None:
 
     answer = service.ask("?")
 
-    assert_no_answer(answer, 2)
+    assert_no_answer(answer, 2, "gate")
     assert answer.generation_ms == 0
+    assert answer.input_tokens is None
 
 
 def test_gate_threshold_is_inclusive() -> None:
@@ -131,18 +135,34 @@ def test_one_relevant_passage_opens_the_gate() -> None:
 
 
 def test_passages_found_only_by_bm25_do_not_open_the_gate() -> None:
-    assert_no_answer(make_service([passage(1, None)]).ask("?"), 1)
+    assert_no_answer(make_service([passage(1, None)]).ask("?"), 1, "gate")
 
 
 def test_no_passages_does_not_call_the_llm() -> None:
-    assert_no_answer(make_service([]).ask("?"), 0)
+    assert_no_answer(make_service([]).ask("?"), 0, "gate")
 
 
 @pytest.mark.parametrize(
     "reply", ["INSUFFICIENT_EVIDENCE", " INSUFFICIENT_EVIDENCE.\n", "INSUFFICIENT_EVIDENCE [1]"]
 )
 def test_insufficient_evidence_reply(reply: str) -> None:
-    assert_no_answer(make_service([passage(1)], reply).ask("?"), 1)
+    assert_no_answer(make_service([passage(1)], reply).ask("?"), 1, "model")
+
+
+def test_an_answer_has_no_refusal() -> None:
+    assert make_service([passage(1)], "Anvils [1].").ask("?").refusal is None
+
+
+def test_token_usage_is_passed_on() -> None:
+    answer = make_service([passage(1)], Completion("Anvils [1].", 900, 40)).ask("?")
+
+    assert (answer.input_tokens, answer.output_tokens) == (900, 40)
+
+
+def test_token_usage_is_kept_when_the_model_refuses() -> None:
+    answer = make_service([passage(1)], Completion("INSUFFICIENT_EVIDENCE", 900, 3)).ask("?")
+
+    assert (answer.refusal, answer.input_tokens, answer.output_tokens) == ("model", 900, 3)
 
 
 def test_llm_errors_reach_the_caller() -> None:

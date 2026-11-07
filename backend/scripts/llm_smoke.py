@@ -31,7 +31,8 @@ def main() -> None:
     except LLMError as error:
         sys.exit(f"{settings.llm_provider}: FAILED: {error}")
     elapsed = time.perf_counter() - started
-    print(f"{settings.llm_provider}: {reply!r} in {elapsed:.1f}s")
+    tokens = f"{reply.input_tokens} in, {reply.output_tokens} out"
+    print(f"{settings.llm_provider}: {reply.text!r} in {elapsed:.1f}s ({tokens} tokens)")
 
 
 if __name__ == "__main__":

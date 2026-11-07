@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
-from novabridge_qa.llm.base import ChatMessage
+from novabridge_qa.llm.base import ChatMessage, Completion
 
 
 @dataclass(frozen=True)
@@ -15,16 +15,21 @@ class RecordedCall:
 
 @dataclass
 class FakeLLM:
-    """Returns each scripted reply in turn. An exception in the script is raised instead."""
+    """Returns each scripted reply in turn. An exception in the script is raised instead.
 
-    replies: list[str | Exception]
+    A plain string becomes a Completion with no token counts.
+    """
+
+    replies: list[str | Completion | Exception]
     calls: list[RecordedCall] = field(default_factory=list)
 
-    def complete(self, system: str, messages: Sequence[ChatMessage], *, max_tokens: int) -> str:
+    def complete(
+        self, system: str, messages: Sequence[ChatMessage], *, max_tokens: int
+    ) -> Completion:
         self.calls.append(RecordedCall(system, tuple(messages), max_tokens))
         if not self.replies:
             raise AssertionError("FakeLLM was called more often than scripted")
         reply = self.replies.pop(0)
         if isinstance(reply, Exception):
             raise reply
-        return reply
+        return Completion(reply) if isinstance(reply, str) else reply

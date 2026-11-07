@@ -3,6 +3,7 @@
 import logging
 import time
 from dataclasses import dataclass
+from typing import Literal
 
 from novabridge_qa.domain.models import ScoredPassage, SearchFilters
 from novabridge_qa.llm.base import ChatMessage, LLMClient
@@ -21,9 +22,18 @@ class Source:
     passage: ScoredPassage
 
 
+# Why no answer was written: the relevance gate stopped the question before the LLM, the model
+# replied INSUFFICIENT_EVIDENCE, or its reply was discarded for having no valid citation.
+Refusal = Literal["gate", "model", "no_citations"]
+
+
 @dataclass(frozen=True)
 class Answer:
-    """`retrieved` is always filled: the UI lists it as closest passages when nothing is cited."""
+    """`retrieved` is always filled: the UI lists it as closest passages when nothing is cited.
+
+    `refusal` is set exactly when `insufficient_evidence` is. Token counts are None when the LLM
+    was not called or its provider does not report them.
+    """
 
     text: str
     insufficient_evidence: bool
@@ -31,6 +41,9 @@ class Answer:
     retrieved: tuple[ScoredPassage, ...]
     retrieval_ms: int
     generation_ms: int
+    refusal: Refusal | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
 
 
 def _elapsed_ms(started: float) -> int:
@@ -71,34 +84,46 @@ class QAService:
         passages = tuple(self._retriever.search(question, top_k or self._top_k, filters))
         retrieval_ms = _elapsed_ms(started)
 
-        def no_answer(generation_ms: int) -> Answer:
-            return Answer("", True, (), passages, retrieval_ms, generation_ms)
-
         if not passes_relevance_gate(passages, self._min_relevance):
-            return no_answer(0)
+            return Answer("", True, (), passages, retrieval_ms, 0, refusal="gate")
 
         started = time.perf_counter()
-        reply = self._llm.complete(
+        completion = self._llm.complete(
             SYSTEM_PROMPT,
             [ChatMessage("user", build_user_message(question, passages))],
             max_tokens=self._max_tokens,
         )
         generation_ms = _elapsed_ms(started)
 
-        # `in`, not `==`: a model that adds a word or a full stop still means the same thing.
-        if INSUFFICIENT_EVIDENCE in reply:
-            return no_answer(generation_ms)
+        def answer(
+            text: str, sources: tuple[Source, ...] = (), refusal: Refusal | None = None
+        ) -> Answer:
+            return Answer(
+                text,
+                refusal is not None,
+                sources,
+                passages,
+                retrieval_ms,
+                generation_ms,
+                refusal=refusal,
+                input_tokens=completion.input_tokens,
+                output_tokens=completion.output_tokens,
+            )
 
-        validated = validate(reply, len(passages))
+        # `in`, not `==`: a model that adds a word or a full stop still means the same thing.
+        if INSUFFICIENT_EVIDENCE in completion.text:
+            return answer("", refusal="model")
+
+        validated = validate(completion.text, len(passages))
         if validated.dropped_ids:
             logger.warning("Dropped citations of unknown passages: %s", validated.dropped_ids)
         if not validated.cited_ids_in_order:
             # Worth a warning: this looks the same to users as the model finding no evidence.
             logger.warning("Discarded an LLM reply with no valid citations")
-            return no_answer(generation_ms)
+            return answer("", refusal="no_citations")
 
         sources = tuple(
             Source(new_id, passages[passage_id - 1])
             for new_id, passage_id in enumerate(validated.cited_ids_in_order, start=1)
         )
-        return Answer(validated.text, False, sources, passages, retrieval_ms, generation_ms)
+        return answer(validated.text, sources)
