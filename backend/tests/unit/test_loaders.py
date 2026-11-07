@@ -3,9 +3,14 @@ from pathlib import Path
 import pytest
 
 from novabridge_qa.ingestion.loaders import (
+    LOADERS,
+    SUPPORTED_SUFFIXES,
     UnsupportedFormatError,
     decode_text,
+    is_supported,
     load_file,
+    load_html,
+    load_text,
     strip_edgar_markup,
 )
 
@@ -86,7 +91,7 @@ def test_load_file_matches_suffix_case_insensitively(tmp_path: Path) -> None:
     assert load_file(path).text == "ACME"
 
 
-@pytest.mark.parametrize("name", ["report.pdf", "report.htm", "report"])
+@pytest.mark.parametrize("name", ["report.pdf", "report.htm.zip", "report"])
 def test_load_file_rejects_unsupported_types(tmp_path: Path, name: str) -> None:
     with pytest.raises(UnsupportedFormatError):
         load_file(tmp_path / name)
@@ -95,3 +100,24 @@ def test_load_file_rejects_unsupported_types(tmp_path: Path, name: str) -> None:
 def test_decode_handles_bom_windows_newlines_and_cp1252() -> None:
     assert decode_text(b"\xef\xbb\xbfACME\r\nCorp") == "ACME\nCorp"
     assert decode_text(b"ACME\x92s") == "ACME\u2019s"
+
+
+@pytest.mark.parametrize(
+    ("suffix", "loader"),
+    [(".txt", load_text), (".md", load_text), (".htm", load_html), (".html", load_html)],
+)
+def test_each_suffix_has_its_loader(suffix: str, loader: object) -> None:
+    assert LOADERS[suffix] is loader
+
+
+def test_supported_suffixes_come_from_the_loaders() -> None:
+    assert frozenset(LOADERS) == SUPPORTED_SUFFIXES
+    assert is_supported("Report.HTML")
+    assert not is_supported("report.pdf")
+
+
+def test_load_file_dispatches_html_by_suffix(tmp_path: Path) -> None:
+    path = tmp_path / "page.HTM"
+    path.write_text("<html><body><p>ACME</p><script>x()</script></body></html>")
+
+    assert load_file(path).text == "ACME"

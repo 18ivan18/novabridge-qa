@@ -40,6 +40,7 @@ def test_uppercase_titles_are_normalized() -> None:
 
 def test_form_names_keep_their_capitals() -> None:
     assert titles("ITEM 14. REPORTS ON FORM 8-K\n\nText.\n") == ["Item 14 — Reports On Form 8-K"]
+    assert titles("ITEM 16. FORM 10-K SUMMARY\n\nText.\n") == ["Item 16 — Form 10-K Summary"]
 
 
 def test_lettered_items_are_uppercased() -> None:
@@ -75,6 +76,13 @@ def test_contents_entries_are_skipped() -> None:
 
     assert [s.title for s in sections] == [FRONT_MATTER, "Item 1 — Business", "Item 5 — Market"]
     assert text[sections[1].start :].startswith("Item 1. Business\n\nAnvils")
+
+
+def test_table_rows_are_not_headings() -> None:
+    # HTML filings lay out their table of contents as a table, with no dot leaders.
+    text = "Item 1. | Business | 3\nItem 7. | Discussion | 9\n\nItem 1. Business\n\nAnvils.\n"
+
+    assert titles(text) == [FRONT_MATTER, "Item 1 — Business"]
 
 
 def test_cross_references_are_not_headings() -> None:
