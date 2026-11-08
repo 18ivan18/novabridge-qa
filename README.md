@@ -118,6 +118,12 @@ With only the TXT filings indexed, hybrid R@6 on the same 21 questions was 0.86 
 2026 filings answer some of the same questions for another year, which pushes the old evidence down.
 The 2026 questions were approved by hand, and nothing has been tuned on them.
 
+**Most misses are ranking, not retrieval.** Each retriever passes its top 20 passages to fusion,
+and at 400 tokens one of them finds the evidence for 0.96 of the HTML questions and 0.90 of the TXT
+ones. Of the 9 questions hybrid misses in the top 6, 6 were among those candidates. RRF puts a
+passage found by both retrievers above any passage found by only one, which drops them. Details are
+under "Candidates before fusion" in [decisions.md](backend/eval/decisions.md).
+
 **Tuned:** `CHUNK_TOKENS` stayed at 400, `TOP_K` at 6 and `MIN_RELEVANCE` became 0.58. Adding the
 indexing header raised hybrid R@6 from 0.76 to 0.86.
 

@@ -4,6 +4,7 @@ from datetime import UTC, date, datetime
 import pytest
 from run_eval import (
     Question,
+    candidate_recall,
     first_hit_rank,
     normalize,
     question_sets,
@@ -62,6 +63,25 @@ def test_score_computes_recall_and_mrr() -> None:
 
     assert scores.recall == {1: 0.25, 3: 0.5}
     assert scores.mrr == pytest.approx((1 + 1 / 4 + 1 / 2) / 4)
+
+
+def test_mrr_ignores_ranks_past_its_depth() -> None:
+    assert score([2, 20], [1], mrr_depth=10).mrr == pytest.approx(0.5 / 2)
+
+
+def test_candidate_recall_separates_what_each_retriever_found_from_what_fusion_kept() -> None:
+    ranks = {
+        "dense": [1, None, 15, None],
+        "sparse": [3, 2, None, 25],
+        "hybrid": [1, 4, 9, None],
+    }
+
+    found = candidate_recall(["a", "b", "c", "d"], ranks, candidates=20, top_k=6)
+
+    assert found.either == {"a", "b", "c"}
+    assert found.dense_only == {"c"}
+    assert found.sparse_only == {"b"}
+    assert found.lost_by_fusion == {"c"}
 
 
 def test_threshold_is_inclusive() -> None:

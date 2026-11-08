@@ -9,6 +9,10 @@ untouched. A question counts as found when a passage from the right company cont
 Both generations of filings are indexed, so each answerable question names its filing by
 `ticker` and `period_end`, and only a passage from that filing counts. Scores are reported per
 filing format, which separates the TXT filings from the HTML ones.
+
+Each retriever hands its top `retrieval_candidates` passages to fusion, so recall at that depth
+is the most hybrid search can find. The candidate table compares it with what survives fusion
+and the cut to `top_k`.
 """
 
 import json
@@ -33,7 +37,9 @@ from novabridge_qa.retrieval.sparse import SparseIndex
 
 EVAL_DIR = Path(__file__).parent
 CHUNK_SIZES = (200, 300, 400)
-K_VALUES = (1, 3, 6, 8, 10)
+K_VALUES = (1, 3, 6, 8, 10, 20)
+# MRR stops at rank 10, so it stays comparable with the runs recorded in decisions.md.
+MRR_DEPTH = 10
 THRESHOLDS = (0.50, 0.55, 0.60, 0.65, 0.70, 0.75)
 
 
@@ -87,10 +93,56 @@ def first_hit_rank(passages: Sequence[ScoredPassage], question: Question) -> int
     return None
 
 
-def score(ranks: Sequence[int | None], k_values: Sequence[int]) -> Scores:
+def score(
+    ranks: Sequence[int | None], k_values: Sequence[int], mrr_depth: int = MRR_DEPTH
+) -> Scores:
     recall = {k: sum(r is not None and r <= k for r in ranks) / len(ranks) for k in k_values}
-    mrr = sum(1 / r for r in ranks if r is not None) / len(ranks)
+    mrr = sum(1 / r for r in ranks if r is not None and r <= mrr_depth) / len(ranks)
     return Scores(recall=recall, mrr=mrr)
+
+
+@dataclass(frozen=True)
+class CandidateRecall:
+    """Which questions had their evidence found, by question id."""
+
+    total: int
+    dense: frozenset[str]
+    sparse: frozenset[str]
+    hybrid: frozenset[str]
+
+    @property
+    def either(self) -> frozenset[str]:
+        return self.dense | self.sparse
+
+    @property
+    def dense_only(self) -> frozenset[str]:
+        return self.dense - self.sparse
+
+    @property
+    def sparse_only(self) -> frozenset[str]:
+        return self.sparse - self.dense
+
+    @property
+    def lost_by_fusion(self) -> frozenset[str]:
+        """Found by a retriever, but not in the fused top k."""
+        return self.either - self.hybrid
+
+
+def candidate_recall(
+    ids: Sequence[str], ranks: dict[str, Sequence[int | None]], candidates: int, top_k: int
+) -> CandidateRecall:
+    """`ranks` holds each mode's first-hit rank per question, in the order of `ids`."""
+
+    def found(mode: str, depth: int) -> frozenset[str]:
+        hits = zip(ids, ranks[mode], strict=True)
+        return frozenset(i for i, r in hits if r is not None and r <= depth)
+
+    return CandidateRecall(
+        total=len(ids),
+        dense=found("dense", candidates),
+        sparse=found("sparse", candidates),
+        hybrid=found("hybrid", top_k),
+    )
 
 
 def share_at_or_above(similarities: Sequence[float], threshold: float) -> int:
@@ -166,6 +218,29 @@ def retrieval_table(rows: Sequence[Row]) -> str:
     return "\n".join(lines)
 
 
+def candidate_table(
+    rows: Sequence[tuple[int, str, CandidateRecall]], candidates: int, top_k: int
+) -> str:
+    def share(found: frozenset[str], total: int) -> str:
+        return f"{len(found) / total:.2f}"
+
+    def ids(found: frozenset[str]) -> str:
+        return ", ".join(sorted(found)) or "none"
+
+    lines = [
+        f"| Chunk tokens | Questions | Dense R@{candidates} | BM25 R@{candidates} "
+        f"| Either R@{candidates} | Hybrid R@{top_k} | Only dense | Only BM25 | Lost by fusion |",
+        "|---|---|---|---|---|---|---|---|---|",
+    ]
+    for chunk_tokens, name, c in rows:
+        lines.append(
+            f"| {chunk_tokens} | {name} | {share(c.dense, c.total)} | {share(c.sparse, c.total)} "
+            f"| {share(c.either, c.total)} | {share(c.hybrid, c.total)} "
+            f"| {ids(c.dense_only)} | {ids(c.sparse_only)} | {ids(c.lost_by_fusion)} |"
+        )
+    return "\n".join(lines)
+
+
 def question_sets(answerable: Sequence[Question], formats: dict[str, str]) -> dict[str, list[int]]:
     """Group question positions by the format of their filing, such as "TXT filings (21)"."""
     groups: dict[str, list[int]] = {}
@@ -202,22 +277,33 @@ def main() -> None:
     embedder = build_embedder(settings)
 
     rows: list[Row] = []
+    candidate_rows: list[tuple[int, str, CandidateRecall]] = []
     misses: list[str] = []
     gate_sections: list[str] = []
     for chunk_tokens in CHUNK_SIZES:
         with tempfile.TemporaryDirectory() as directory:
             retriever, dense = build_retriever(settings, embedder, chunk_tokens, Path(directory))
+            ranks_by_mode: dict[str, list[int | None]] = {}
             for mode in get_args(SearchMode):
                 ranks = [
                     first_hit_rank(retriever.search(q.question, max(K_VALUES), mode=mode), q)
                     for q in answerable
                 ]
+                ranks_by_mode[mode] = ranks
                 for name, positions in sets.items():
                     scores = score([ranks[p] for p in positions], K_VALUES)
                     rows.append(Row(chunk_tokens, dense.count_chunks(), mode, name, scores))
                 for question, rank in zip(answerable, ranks, strict=True):
                     if rank is None or rank > settings.top_k:
                         misses.append(f"| {chunk_tokens} | {mode} | {question.id} | {rank} |")
+            for name, positions in sets.items():
+                found = candidate_recall(
+                    [answerable[p].id for p in positions],
+                    {m: [r[p] for p in positions] for m, r in ranks_by_mode.items()},
+                    settings.retrieval_candidates,
+                    settings.top_k,
+                )
+                candidate_rows.append((chunk_tokens, name, found))
 
             top: dict[str, float] = {
                 q.id: dense.search(embedder.embed_query(q.question), 1)[0].similarity
@@ -243,7 +329,13 @@ def main() -> None:
             f"{len(questions) - len(answerable)} unanswerable. Unfiltered searches over all "
             "filings; a question counts as found only in the filing it names.",
             "## Recall and MRR",
-            retrieval_table(rows),
+            f"MRR counts ranks up to {MRR_DEPTH}.\n\n" + retrieval_table(rows),
+            "## Candidates before fusion",
+            f"Each retriever passes its top {settings.retrieval_candidates} passages to RRF. "
+            "*Either* is the share found by at least one of them: the most hybrid search can "
+            "return. *Lost by fusion* lists questions found by a retriever but not in the fused "
+            f"top {settings.top_k}.\n\n"
+            + candidate_table(candidate_rows, settings.retrieval_candidates, settings.top_k),
             f"## Questions not found within top {settings.top_k}",
             "A rank of None means the passage was not in the top "
             f"{max(K_VALUES)}.\n\n| Chunk tokens | Mode | Question | Rank |\n|---|---|---|---|\n"
