@@ -50,14 +50,14 @@ def _elapsed_ms(started: float) -> int:
     return round((time.perf_counter() - started) * 1000)
 
 
-def passes_relevance_gate(passages: tuple[ScoredPassage, ...], min_relevance: float) -> bool:
-    """Check the best dense similarity among the passages.
+def passes_relevance_gate(best_similarity: float | None, min_relevance: float) -> bool:
+    """Check the best dense similarity among the retrieval candidates.
 
-    Chunks that only BM25 found have no similarity. They cannot open the gate, because a shared
-    word such as "revenue" says nothing about whether the question is on topic.
+    BM25 scores cannot open the gate, because a shared word such as "revenue" says nothing about
+    whether the question is on topic. Nor can the re-ranker's: its scores are not calibrated, and
+    the threshold was tuned on dense similarity.
     """
-    similarities = [p.dense_similarity for p in passages if p.dense_similarity is not None]
-    return bool(similarities) and max(similarities) >= min_relevance
+    return best_similarity is not None and best_similarity >= min_relevance
 
 
 class QAService:
@@ -81,10 +81,11 @@ class QAService:
     ) -> Answer:
         """Answer from the indexed documents. Raises LLMError if the provider fails."""
         started = time.perf_counter()
-        passages = tuple(self._retriever.search(question, top_k or self._top_k, filters))
+        result = self._retriever.retrieve(question, top_k or self._top_k, filters)
+        passages = tuple(result.passages)
         retrieval_ms = _elapsed_ms(started)
 
-        if not passes_relevance_gate(passages, self._min_relevance):
+        if not passes_relevance_gate(result.best_similarity, self._min_relevance):
             return Answer("", True, (), passages, retrieval_ms, 0, refusal="gate")
 
         started = time.perf_counter()

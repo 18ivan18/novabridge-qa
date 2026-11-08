@@ -11,7 +11,7 @@ from novabridge_qa.qa.prompt import SYSTEM_PROMPT
 from novabridge_qa.qa.service import Answer, QAService
 from novabridge_qa.retrieval.dense import DenseIndex
 from novabridge_qa.retrieval.embedder import FakeEmbedder
-from novabridge_qa.retrieval.hybrid import HybridRetriever
+from novabridge_qa.retrieval.hybrid import HybridRetriever, SearchResult
 from novabridge_qa.retrieval.sparse import SparseIndex
 
 DOCUMENT = Document(
@@ -37,11 +37,10 @@ class StubRetriever:
         self.passages = passages
         self.calls: list[tuple[str, int, SearchFilters | None]] = []
 
-    def search(
-        self, query: str, k: int, filters: SearchFilters | None = None
-    ) -> list[ScoredPassage]:
+    def retrieve(self, query: str, k: int, filters: SearchFilters | None = None) -> SearchResult:
         self.calls.append((query, k, filters))
-        return self.passages[:k]
+        similarities = [p.dense_similarity for p in self.passages if p.dense_similarity]
+        return SearchResult(self.passages[:k], max(similarities, default=None))
 
 
 def make_service(
@@ -132,6 +131,19 @@ def test_one_relevant_passage_opens_the_gate() -> None:
     passages = [passage(1, 0.1), passage(2, 0.9)]
 
     assert not make_service(passages, "Anvils [2].").ask("?").insufficient_evidence
+
+
+def test_a_relevant_candidate_outside_the_top_k_opens_the_gate() -> None:
+    # The re-ranker may push the passage dense search liked best out of the top k.
+    service = QAService(
+        StubRetriever([passage(1, 0.1), passage(2, 0.9)]),
+        FakeLLM(["Anvils [1]."]),
+        top_k=1,
+        min_relevance=0.5,
+        max_tokens=100,
+    )
+
+    assert not service.ask("?").insufficient_evidence
 
 
 def test_passages_found_only_by_bm25_do_not_open_the_gate() -> None:

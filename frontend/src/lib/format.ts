@@ -56,9 +56,10 @@ export function unwrapExcerpt(text: string): string {
 }
 
 export function retrievalLine(passage: Passage): string {
-  const { dense_rank, sparse_rank, rrf_score } = passage.retrieval;
+  const { dense_rank, sparse_rank, rrf_score, rerank_rank } = passage.retrieval;
   const rank = (value: number | null) => (value === null ? "–" : `#${value}`);
-  return `bm25 ${rank(sparse_rank)} · dense ${rank(dense_rank)} · rrf ${rrf_score.toFixed(4)}`;
+  const fused = `bm25 ${rank(sparse_rank)} · dense ${rank(dense_rank)} · rrf ${rrf_score.toFixed(4)}`;
+  return rerank_rank === null ? fused : `rerank #${rerank_rank} · ${fused}`;
 }
 
 /** The badge in the library: the ticker, or the file type for uploads. */

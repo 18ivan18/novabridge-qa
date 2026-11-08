@@ -18,6 +18,10 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 ARG EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
 ENV FASTEMBED_CACHE_PATH=/opt/models
 RUN .venv/bin/python -c "from fastembed import TextEmbedding; TextEmbedding('${EMBEDDING_MODEL}')"
+# The re-ranker is baked in the same way, about 130 MB. Empty skips it, for RERANKER_MODEL= (off).
+ARG RERANKER_MODEL=jinaai/jina-reranker-v1-tiny-en
+RUN if [ -n "${RERANKER_MODEL}" ]; then .venv/bin/python -c \
+    "from fastembed.rerank.cross_encoder import TextCrossEncoder as T; T('${RERANKER_MODEL}')"; fi
 
 COPY src ./src
 RUN --mount=type=cache,target=/root/.cache/uv \

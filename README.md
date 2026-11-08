@@ -88,6 +88,7 @@ flowchart TD
 | **Embedder separate from the LLM** | Anthropic has no embeddings API, so the two cannot share a provider | Two settings instead of one |
 | **`bge-small-en-v1.5` through fastembed** | Small ONNX model that is fast on CPU, local and free | 512-token limit, so chunks stay at 400 |
 | **Hybrid search with hand-written RRF** | Filings mix exact terms, where BM25 wins, with paraphrased questions, where dense wins. RRF needs no score calibration. | Two indexes to keep in step |
+| **Cross-encoder re-ranker** (`jina-reranker-v1-tiny-en`) on the top 20 after RRF | RRF ranks a passage found by both retrievers above any passage found by one, which dropped 6 of the 9 misses. Reading the question and passage together raised R@6 at 400 tokens from 0.83 to 0.92 (HTML) and 0.76 to 0.81 (TXT). Chosen from six fastembed models on recall, speed and license. | About 0.5 s more per question on CPU, and 129 MB more model in the image. `RERANKER_MODEL=` turns it off |
 | **Chroma as the source of truth** | Embedded with no operations work. BM25 is derived from it and can always be rebuilt. | One process at a time, which is why ingest runs before the API |
 | **Citations checked on the server** | The model's citations are parsed, invalid numbers dropped, the rest renumbered. No valid citation counts as no answer. | A correct answer with no parsable citation is discarded |
 | **Two no-evidence layers** | A similarity gate stops off-topic questions without calling the LLM, and the model can refuse the rest | The gate cannot catch in-domain questions (see below) |
@@ -95,7 +96,7 @@ flowchart TD
 | **SEC EDGAR filings as the corpus** | Real, relevant and public domain, so they can be committed | See the limitations on their age |
 | **Upload as a background job** | Embedding is slow, so the request returns at once and the UI polls | In-memory jobs, one uvicorn worker. Production would use a queue such as Celery, RQ or Arq with a persisted job table |
 | **Vite, React, shadcn/ui, TanStack Query** | Components live in the repository and can be styled to the design. TanStack Query replaces hand-written loading and polling code. | Tailwind and Radix become dependencies |
-| **Embedding model baked into the image** | No download on first start | 65 MB more image. The `api` image is 1.06 GB |
+| **Models baked into the image** | No download on first start | The embedder is 65 MB and the re-ranker 129 MB. The `api` image is 1.27 GB |
 | **`sentence-transformers` and `torch` as an optional extra** | Only needed for the planned embedder comparison, and `torch` alone is about 700 MB | That provider does not work in Docker, and needs `uv sync --extra sentence-transformers` locally |
 
 ## Retrieval evaluation
@@ -107,8 +108,10 @@ passages. All six filings are indexed. At the chosen 400 tokens:
 
 | Mode | Questions | R@1 | R@3 | R@6 | R@10 | MRR |
 |---|---|---|---|---|---|---|
-| **Hybrid** | TXT filings | 0.33 | 0.62 | 0.76 | 0.81 | 0.496 |
-| **Hybrid** | HTML filings | 0.58 | 0.79 | 0.83 | 0.83 | 0.684 |
+| **Re-ranked** | TXT filings | 0.62 | 0.67 | 0.81 | 0.81 | 0.676 |
+| **Re-ranked** | HTML filings | 0.58 | 0.83 | 0.92 | 0.92 | 0.715 |
+| Hybrid | TXT filings | 0.33 | 0.62 | 0.76 | 0.81 | 0.496 |
+| Hybrid | HTML filings | 0.58 | 0.79 | 0.83 | 0.83 | 0.684 |
 | Dense | TXT filings | 0.33 | 0.57 | 0.71 | 0.76 | 0.484 |
 | Dense | HTML filings | 0.54 | 0.71 | 0.75 | 0.88 | 0.642 |
 | BM25 | TXT filings | 0.24 | 0.38 | 0.52 | 0.71 | 0.361 |
@@ -124,6 +127,12 @@ ones. Of the 9 questions hybrid misses in the top 6, 6 were among those candidat
 passage found by both retrievers above any passage found by only one, which drops them. Details are
 under "Candidates before fusion" in [decisions.md](backend/eval/decisions.md).
 
+**The re-ranker recovers half of them.** A cross-encoder re-orders the top 20 passages after RRF.
+At 400 tokens it finds 3 more questions in the top 6 (`a25`, `n24`, `n02`) and loses none, at
+about 0.5 s more per search. It reaches the most that 20 candidates allow: the other misses are
+not in the fused top 20, or not found at all. The model comparison is in
+[decisions.md](backend/eval/decisions.md) under "Re-ranker".
+
 **Tuned:** `CHUNK_TOKENS` stayed at 400, `TOP_K` at 6 and `MIN_RELEVANCE` became 0.58. Adding the
 indexing header raised hybrid R@6 from 0.76 to 0.86.
 
@@ -136,30 +145,36 @@ than a clear win: at 200 tokens dense scored higher. Details are in
 
 `backend/eval/run_answer_eval.py` asks every question through the real pipeline and checks each
 answer against facts written for it ([answer_results.md](backend/eval/answer_results.md), raw
-answers in `backend/eval/answer_runs/`). One run with `openai/gpt-oss-120b` on Groq, all six filings
-indexed:
+answers in `backend/eval/answer_runs/`). Two runs with `openai/gpt-oss-120b` on Groq, all six
+filings indexed, before and with the re-ranker:
 
 | Questions | Answered | Correct | Evidence cited | Answered from the other filing |
 |---|---|---|---|---|
-| HTML filings (24) | 23 | 21 | 20 | 1 |
-| TXT filings (21) | 17 | 15 | 15 | 2 |
+| HTML filings (24), with re-ranker | 23 | 23 | 22 | 0 |
+| TXT filings (21), with re-ranker | 19 | 17 | 16 | 1 |
+| HTML filings (24), before | 23 | 21 | 20 | 1 |
+| TXT filings (21), before | 17 | 15 | 15 | 2 |
 
-All 8 unanswerable questions were refused: the 3 off-topic ones by the relevance gate, the 5
-in-domain ones by the model. No answerable question was refused without a retrieval miss behind it.
-A median answer took 0.8 seconds and about 3,000 tokens.
+All 8 unanswerable questions were refused in both runs: the 3 off-topic ones by the relevance gate,
+the 5 in-domain ones by the model. No answerable question was refused without a retrieval miss
+behind it. With the re-ranker a median answer took 1.5 seconds (0.8 before): retrieval went from
+26 ms to 585 ms, and generation stayed at about 0.8 s. Each answer used about 3,000 tokens.
 
-Every answer scored wrong was read. Apart from the retrieval misses and the old questions answered
-from the 2026 filings, one is a real error: `a25` reported Apple's remaining buyback authorization
-($114 billion) as the cost of its buybacks, because the HTML loader drops empty table cells and
-shifted the figure into the wrong column. This is a single run at temperature 0.1, and "correct" is a
-pattern match on the expected facts, not a judgment of the whole answer.
+Every answer scored wrong was read. The re-ranker made 4 answers correct (`a25`, `n24`, `m02`,
+`n02`) and none wrong. The rest are retrieval misses that the model refused, and old questions with
+no year answered from the 2026 filings. The first run had one real error: `a25` reported Apple's
+remaining buyback authorization ($114 billion) as the cost of its buybacks, because the HTML loader
+drops empty table cells and shifted the figure into the wrong column. With the re-ranker it answered
+from a text passage instead, but the loader bug is still open. Each is a single run at temperature
+0.1, and "correct" is a pattern match on the expected facts, not a judgment of the whole answer.
 
 ## How hallucination is limited
 
 1. **Prompt:** the model may use only the numbered passages, must cite every claim, and must reply
    with a fixed marker if they do not answer the question. Passage text is marked as data, in
    delimiters that uploaded text cannot close.
-2. **Relevance gate:** if the best dense similarity is under `MIN_RELEVANCE`, the LLM is never called.
+2. **Relevance gate:** if the best dense similarity among the retrieved candidates is under
+   `MIN_RELEVANCE`, the LLM is never called. Re-ranking happens after it and cannot open it.
 3. **Citation check:** only passages the answer really cites come back as sources.
 
 **What this cannot guarantee:**
@@ -190,8 +205,11 @@ pattern match on the expected facts, not a judgment of the whole answer.
   and has a daily token cap too. Once it is used up, questions fail with a friendly message until it
   resets, even though small requests still get through.
 
-For production: authentication, a job queue with persisted jobs, a server-based vector store, a
-cross-encoder re-ranker, faithfulness checks on answers, and monitoring.
+- **Re-ranking cost:** the cross-encoder adds about 0.5 s to each search on CPU, and its cost grows
+  with the number of candidates and their length. A GPU or a hosted re-ranker would cut it.
+
+For production: authentication, a job queue with persisted jobs, a server-based vector store,
+faithfulness checks on answers, and monitoring.
 
 ## Testing
 
@@ -200,9 +218,9 @@ cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy
 cd frontend && npm run lint && npm run typecheck && npm test
 ```
 
-- **Backend (283 tests):** loaders (TXT and HTML), chunking, sections, RRF, citations, prompts, settings, the QA service with
+- **Backend (318 tests):** loaders (TXT and HTML), chunking, sections, RRF, re-ranking, citations, prompts, settings, the QA service with
   fakes, and the API through `TestClient`. No network or API keys needed.
-- **Frontend (29 tests):** citation rendering, API client errors and upload queue state. These are
+- **Frontend (31 tests):** citation rendering, retrieval details, API client errors and upload queue state. These are
   deliberately few. The full flow was checked by hand-written scripts in a real browser rather than
   automated tests in the repository.
 - **Retrieval quality:** `eval/run_eval.py`, run by hand, with results committed.

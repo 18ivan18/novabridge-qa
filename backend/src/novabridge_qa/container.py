@@ -13,6 +13,7 @@ from novabridge_qa.retrieval.embedder import (
     SentenceTransformerEmbedder,
 )
 from novabridge_qa.retrieval.hybrid import HybridRetriever
+from novabridge_qa.retrieval.reranker import FastEmbedReranker, Reranker
 from novabridge_qa.retrieval.sparse import SparseIndex
 
 
@@ -58,6 +59,10 @@ def load_sparse_index(settings: Settings, dense: DenseIndex) -> SparseIndex:
     return rebuild_sparse_index(settings, dense)
 
 
+def build_reranker(settings: Settings) -> Reranker | None:
+    return FastEmbedReranker(settings.reranker_model) if settings.reranker_model else None
+
+
 def build_retriever(settings: Settings, embedder: Embedder, dense: DenseIndex) -> HybridRetriever:
     return HybridRetriever(
         embedder,
@@ -65,6 +70,8 @@ def build_retriever(settings: Settings, embedder: Embedder, dense: DenseIndex) -
         load_sparse_index(settings, dense),
         candidates=settings.retrieval_candidates,
         rrf_k=settings.rrf_k,
+        reranker=build_reranker(settings),
+        rerank_candidates=settings.rerank_candidates,
     )
 
 

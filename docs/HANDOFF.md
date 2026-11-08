@@ -73,6 +73,7 @@ The brief explicitly says: *"This task tests your judgment and ability to verify
 | D11 | **Frontend: Vite + React + TypeScript, shadcn/ui, TanStack Query** | shadcn/ui components are copied into the repo, so they stay readable and restylable to match `docs/design/` through the design tokens. TanStack Query handles request state and job polling, replacing hand-written loading/error/polling code. Trade-off: Tailwind and Radix become dependencies. |
 | D12 | **Python 3.12, uv, ruff, mypy, pytest** | Modern standard tooling; `uv.lock` makes installs reproducible. |
 | D13 | **Docker Compose**: `api` (FastAPI/uvicorn) + `web` (nginx serving the Vite build and proxying `/api`) | One command to run. Optional `ollama` service behind a compose profile for a fully local LLM. |
+| D14 | **Cross-encoder re-ranker** (`jinaai/jina-reranker-v1-tiny-en` via `fastembed`) on the top `RERANK_CANDIDATES` (20) after RRF; `RERANKER_MODEL=` turns it off | RRF ranks a passage found by both retrievers above any found by one, which dropped most misses. Chosen from six fastembed cross-encoders on recall, CPU latency and license (`backend/eval/decisions.md`, "Re-ranker"). The relevance gate still uses dense similarity, over all candidates before re-ranking. |
 
 ---
 
@@ -134,6 +135,7 @@ Implementations:
 - `llm/factory.py` → `build_llm(settings) -> LLMClient` (match on `settings.llm_provider`)
 - `retrieval/embedder.py` → `SentenceTransformerEmbedder`, `FakeEmbedder` (deterministic hash vectors, for tests)
 - `retrieval/dense.py`, `retrieval/sparse.py`, `retrieval/fusion.py` (pure function `rrf(rankings, k=60)`), `retrieval/hybrid.py`
+- `retrieval/reranker.py` → `Reranker` protocol, `FastEmbedReranker`, `FakeReranker` (word overlap, for tests)
 
 ### Domain models (`domain/models.py`, frozen dataclasses or Pydantic)
 
@@ -291,7 +293,8 @@ novabridge-qa/
 │   │   │   ├── dense.py          # Chroma wrapper
 │   │   │   ├── sparse.py         # bm25s wrapper (build from Chroma, save/load)
 │   │   │   ├── fusion.py         # rrf()
-│   │   │   └── hybrid.py
+│   │   │   ├── hybrid.py
+│   │   │   └── reranker.py       # cross-encoder after fusion
 │   │   ├── llm/
 │   │   │   ├── base.py           # LLMClient Protocol, ChatMessage, LLMError
 │   │   │   ├── openai_compatible.py

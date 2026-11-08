@@ -21,7 +21,7 @@ _EXAMPLE_PASSAGE: dict[str, JsonValue] = {
     "page": None,
     "excerpt": "ACME Corp sells anvils to blacksmiths.",
     "chunk_id": "9f2c1e7a:4",
-    "retrieval": {"dense_rank": 1, "sparse_rank": 3, "rrf_score": 0.0323},
+    "retrieval": {"dense_rank": 1, "sparse_rank": 3, "rrf_score": 0.0323, "rerank_rank": 1},
 }
 
 
@@ -89,6 +89,11 @@ class RetrievalInfo(BaseModel):
     dense_rank: int | None = Field(description="Rank in vector search. Null if it did not appear.")
     sparse_rank: int | None = Field(description="Rank in BM25 search. Null if it did not appear.")
     rrf_score: float = Field(description="The score after Reciprocal Rank Fusion.")
+    rerank_rank: int | None = Field(
+        default=None,
+        description="Rank after cross-encoder re-ranking, which sets the order of the passages. "
+        "Null if re-ranking is off.",
+    )
 
 
 class PassageResponse(BaseModel):

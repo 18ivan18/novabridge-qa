@@ -38,6 +38,7 @@ def _passage_fields(passage: ScoredPassage) -> dict[str, object]:
             dense_rank=passage.dense_rank,
             sparse_rank=passage.sparse_rank,
             rrf_score=passage.rrf_score,
+            rerank_rank=passage.rerank_rank,
         ),
     }
 

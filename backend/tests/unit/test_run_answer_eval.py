@@ -19,6 +19,7 @@ from novabridge_qa.domain.models import Chunk, Document, ScoredPassage, SearchFi
 from novabridge_qa.llm.base import Completion, LLMError, RateLimitError
 from novabridge_qa.llm.fake import FakeLLM
 from novabridge_qa.qa.service import QAService
+from novabridge_qa.retrieval.hybrid import SearchResult
 
 NEW = Question(
     id="q1",
@@ -104,11 +105,9 @@ DOCUMENT = Document(
 
 
 class StubRetriever:
-    def search(
-        self, query: str, k: int, filters: SearchFilters | None = None
-    ) -> list[ScoredPassage]:
+    def retrieve(self, query: str, k: int, filters: SearchFilters | None = None) -> SearchResult:
         chunk = Chunk("doc:0", "doc", "ACME sold 10 anvils.", "Item 7", None, 0, 20)
-        return [ScoredPassage(chunk, DOCUMENT, 1, 1, 0.03, 0.9)]
+        return SearchResult([ScoredPassage(chunk, DOCUMENT, 1, 1, 0.03, 0.9)], 0.9)
 
 
 def make_qa(*replies: str | Completion | Exception) -> QAService:

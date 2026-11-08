@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -125,3 +126,77 @@ def test_sparse_index_is_rebuilt_when_it_falls_behind_chroma(
     add(dense, make_document("c", "GAMMA"), "GAMMA buys anvils")
 
     assert len(load_sparse_index(settings, dense)) == 5
+
+
+class ScriptedReranker:
+    """Scores passages by a fixed list of preferred words, and records what it was given."""
+
+    def __init__(self, *preferred: str) -> None:
+        self.preferred = preferred
+        self.seen: list[str] = []
+
+    def score(self, query: str, passages: Sequence[str]) -> list[float]:
+        self.seen.extend(passages)
+        return [float(sum(word in p for word in self.preferred)) for p in passages]
+
+
+def reranking(dense: DenseIndex, reranker: ScriptedReranker, candidates: int) -> HybridRetriever:
+    sparse = SparseIndex.build(dense.all_passages())
+    return HybridRetriever(
+        FakeEmbedder(),
+        dense,
+        sparse,
+        candidates=10,
+        rrf_k=60,
+        reranker=reranker,
+        rerank_candidates=candidates,
+    )
+
+
+def test_the_reranker_sets_the_order(dense: DenseIndex) -> None:
+    retriever = reranking(dense, ScriptedReranker("roof"), candidates=4)
+
+    passages = retriever.search("ACME anvils", 4)
+
+    assert passages[0].chunk.text == "ACME roof leaks"
+    assert [p.rerank_rank for p in passages] == [1, 2, 3, 4]
+    assert passages[0].rerank_score == 1.0
+
+
+def test_the_reranker_reads_the_title_with_the_passage(dense: DenseIndex) -> None:
+    reranker = ScriptedReranker()
+
+    reranking(dense, reranker, candidates=4).search("ACME anvils", 1)
+
+    assert "ACME report\nACME sells anvils" in reranker.seen
+
+
+def test_only_the_top_candidates_are_reranked(dense: DenseIndex) -> None:
+    reranker = ScriptedReranker("engineers")
+    unranked = make_retriever(dense).search("ACME anvils", 4)
+
+    passages = reranking(dense, reranker, candidates=2).search("ACME anvils", 4)
+
+    assert len(reranker.seen) == 2
+    assert {p.chunk.chunk_id for p in passages[:2]} == {p.chunk.chunk_id for p in unranked[:2]}
+    assert passages[2:] == unranked[2:]
+    assert [p.rerank_rank for p in passages[2:]] == [None, None]
+
+
+def test_hybrid_mode_skips_the_reranker(dense: DenseIndex) -> None:
+    reranker = ScriptedReranker("roof")
+
+    passages = reranking(dense, reranker, candidates=4).search("ACME anvils", 4, mode="hybrid")
+
+    assert reranker.seen == []
+    assert passages == make_retriever(dense).search("ACME anvils", 4)
+
+
+def test_best_similarity_counts_candidates_the_reranker_pushed_out(dense: DenseIndex) -> None:
+    retriever = reranking(dense, ScriptedReranker("engineers"), candidates=4)
+    best = make_retriever(dense).search("ACME sells anvils", 1, mode="dense")[0]
+
+    result = retriever.retrieve("ACME sells anvils", 1)
+
+    assert result.passages[0].chunk.text == "BETA hires engineers"
+    assert result.best_similarity == best.dense_similarity

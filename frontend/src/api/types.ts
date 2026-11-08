@@ -51,6 +51,8 @@ export interface Passage {
     dense_rank: number | null;
     sparse_rank: number | null;
     rrf_score: number;
+    /** Rank after cross-encoder re-ranking; null when re-ranking is off. */
+    rerank_rank: number | null;
   };
 }
 
