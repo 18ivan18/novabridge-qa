@@ -115,7 +115,8 @@ The brief explicitly says: *"This task tests your judgment and ability to verify
 
 ```python
 class LLMClient(Protocol):
-    def complete(self, system: str, messages: Sequence[ChatMessage], *, max_tokens: int) -> str: ...
+    # Completion(text, input_tokens, output_tokens); token counts are None if not reported
+    def complete(self, system: str, messages: Sequence[ChatMessage], *, max_tokens: int) -> Completion: ...
 
 class Embedder(Protocol):
     dimension: int

@@ -8,6 +8,7 @@ from anthropic.types import MessageParam
 from novabridge_qa.llm.base import (
     MAX_RETRIES,
     ChatMessage,
+    Completion,
     LLMError,
     connection_error,
     empty_error,
@@ -28,7 +29,9 @@ class AnthropicClient:
         )
         self._model = model
 
-    def complete(self, system: str, messages: Sequence[ChatMessage], *, max_tokens: int) -> str:
+    def complete(
+        self, system: str, messages: Sequence[ChatMessage], *, max_tokens: int
+    ) -> Completion:
         chat: list[MessageParam] = []
         for message in messages:
             if message.role == "user":
@@ -62,4 +65,8 @@ class AnthropicClient:
         text = "".join(block.text for block in response.content if block.type == "text")
         if not text:
             raise empty_error(PROVIDER)
-        return text
+        return Completion(
+            text,
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
+        )

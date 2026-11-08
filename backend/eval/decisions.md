@@ -130,3 +130,27 @@ comparison):
 
 So HTML does not make the header problem worse, and mostly avoids it. A table longer than one chunk
 still loses its header in the later chunks.
+
+## Answer evaluation
+
+`run_answer_eval.py` asks each question through `QAService` and saves the raw answers, then scores
+them offline against an `expected` list of facts per question. Each fact is a pattern that must
+also match the question's filing, and its alternatives are the accepted ways of writing it, such as
+`7,983` in a table "in millions" against `$7.983 billion` in an answer. Scale is never converted in
+code: every accepted form is written out in the questions file, where it can be reviewed.
+
+**The patterns were widened once, after reading the first run.** Six answers were right but scored
+wrong. The patterns now accept "percent" as well as "%", extra decimals in billions ("$7.983
+billion"), "negatively affect" or "impair" for `a04`, and $0.91 a quarter for `m28` (four quarterly
+dividends of $0.91 make the $3.64 asked for). `n26` no longer requires the dollar amount, which the
+question does not ask for. Widening patterns after seeing answers can hide errors, so every answer
+still scored wrong was read too. They are listed below.
+
+| Questions | Why they are wrong |
+|---|---|
+| `a01`, `m02`, `n02`, `n04`, `m25` | Retrieval missed the evidence and the model refused, as it should. |
+| `n24` | Retrieval missed; answered from the 2001 filing with no year (see above). |
+| `m01`, `m04` | Old questions without a year, answered correctly from the 2026 filing. |
+| `a25` | **A real error.** The HTML loader drops empty table cells, which shifts later cells to the left. In the share repurchase table, the remaining authorization ($114,004 million) moved under the price column, and the model reported it as the cost of the buybacks. |
+
+The `a25` error needs a loader fix: keep a table's columns aligned when a row has empty cells.

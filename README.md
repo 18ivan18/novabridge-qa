@@ -126,10 +126,27 @@ the same questions guided the tuning, so the scores are optimistic. Hybrid is a 
 than a clear win: at 200 tokens dense scored higher. Details are in
 [results.md](backend/eval/results.md) and [decisions.md](backend/eval/decisions.md).
 
-Before the HTML filings were indexed, end to end with `openai/gpt-oss-120b` on Groq, 18 of 21
-answerable questions were answered with the expected evidence cited. The other 3 are the retrieval misses, and the model correctly declined them
-rather than guessing. All 8 unanswerable questions were refused. This was a single run checked by
-script, not by reading each answer against the filings.
+### Answer evaluation
+
+`backend/eval/run_answer_eval.py` asks every question through the real pipeline and checks each
+answer against facts written for it ([answer_results.md](backend/eval/answer_results.md), raw
+answers in `backend/eval/answer_runs/`). One run with `openai/gpt-oss-120b` on Groq, all six filings
+indexed:
+
+| Questions | Answered | Correct | Evidence cited | Answered from the other filing |
+|---|---|---|---|---|
+| HTML filings (24) | 23 | 21 | 20 | 1 |
+| TXT filings (21) | 17 | 15 | 15 | 2 |
+
+All 8 unanswerable questions were refused: the 3 off-topic ones by the relevance gate, the 5
+in-domain ones by the model. No answerable question was refused without a retrieval miss behind it.
+A median answer took 0.8 seconds and about 3,000 tokens.
+
+Every answer scored wrong was read. Apart from the retrieval misses and the old questions answered
+from the 2026 filings, one is a real error: `a25` reported Apple's remaining buyback authorization
+($114 billion) as the cost of its buybacks, because the HTML loader drops empty table cells and
+shifted the figure into the wrong column. This is a single run at temperature 0.1, and "correct" is a
+pattern match on the expected facts, not a judgment of the whole answer.
 
 ## How hallucination is limited
 
@@ -183,6 +200,9 @@ cd frontend && npm run lint && npm run typecheck && npm test
   deliberately few. The full flow was checked by hand-written scripts in a real browser rather than
   automated tests in the repository.
 - **Retrieval quality:** `eval/run_eval.py`, run by hand, with results committed.
+- **Answer quality:** `eval/run_answer_eval.py ask` runs every question through the real LLM, paced
+  under the rate limit and resumable, and saves raw answers in `eval/answer_runs/`.
+  `eval/run_answer_eval.py score` checks them offline and writes `eval/answer_results.md`.
 - CI runs the backend and frontend checks on every push. It does not build the Docker images.
 
 ## AI assistance

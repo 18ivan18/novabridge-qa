@@ -8,6 +8,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from novabridge_qa.llm.base import (
     MAX_RETRIES,
     ChatMessage,
+    Completion,
     LLMError,
     connection_error,
     empty_error,
@@ -39,7 +40,9 @@ class OpenAICompatibleClient:
         self._model = model
         self._temperature = temperature
 
-    def complete(self, system: str, messages: Sequence[ChatMessage], *, max_tokens: int) -> str:
+    def complete(
+        self, system: str, messages: Sequence[ChatMessage], *, max_tokens: int
+    ) -> Completion:
         chat: list[ChatCompletionMessageParam] = [{"role": "system", "content": system}]
         for message in messages:
             if message.role == "user":
@@ -72,4 +75,9 @@ class OpenAICompatibleClient:
             raise LLMError(f"{PROVIDER} declined to answer.")
         if not choice.message.content:
             raise empty_error(PROVIDER)
-        return choice.message.content
+        usage = response.usage
+        return Completion(
+            choice.message.content,
+            input_tokens=usage.prompt_tokens if usage else None,
+            output_tokens=usage.completion_tokens if usage else None,
+        )

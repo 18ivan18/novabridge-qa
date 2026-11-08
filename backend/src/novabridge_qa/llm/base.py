@@ -17,14 +17,29 @@ class LLMError(Exception):
     """
 
 
+class RateLimitError(LLMError):
+    """The provider refused for its rate limit or quota. Callers that run batches stop on this."""
+
+
 @dataclass(frozen=True)
 class ChatMessage:
     role: Literal["user", "assistant"]
     content: str
 
 
+@dataclass(frozen=True)
+class Completion:
+    """A reply and what it cost. Token counts are None when the provider does not report them."""
+
+    text: str
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+
+
 class LLMClient(Protocol):
-    def complete(self, system: str, messages: Sequence[ChatMessage], *, max_tokens: int) -> str: ...
+    def complete(
+        self, system: str, messages: Sequence[ChatMessage], *, max_tokens: int
+    ) -> Completion: ...
 
 
 def status_error(provider: str, status: int) -> LLMError:
@@ -33,7 +48,7 @@ def status_error(provider: str, status: int) -> LLMError:
     if status == 404:
         return LLMError(f"{provider} does not recognize the configured model.")
     if status == 429:
-        return LLMError(f"{provider} rate limit reached. Try again shortly.")
+        return RateLimitError(f"{provider} rate limit reached. Try again shortly.")
     if status >= 500:
         return LLMError(f"{provider} is having problems. Try again shortly.")
     return LLMError(f"{provider} rejected the request (status {status}).")
