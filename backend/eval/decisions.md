@@ -116,6 +116,39 @@ indexed.
 - **Relevance gate:** the highest off-topic score rose from 0.491 to 0.528, still under
   `MIN_RELEVANCE` 0.58, so 3 of 3 are still blocked, but with less margin.
 
+## Candidates before fusion
+
+Dense search and BM25 each pass their top 20 passages (`RETRIEVAL_CANDIDATES`) to RRF, so the
+evidence can only reach the answer if one of them finds it. `results.md` now reports R@20 per
+retriever and the share found by either. At the chosen 400 tokens:
+
+| Questions | Dense R@20 | BM25 R@20 | Either R@20 | Hybrid R@6 | Lost by fusion |
+|---|---|---|---|---|---|
+| HTM filings (24) | 0.92 | 0.83 | 0.96 | 0.83 | `a25`, `m28`, `n24` |
+| TXT filings (21) | 0.81 | 0.90 | 0.90 | 0.76 | `m01`, `m02`, `n02` |
+
+- **Most misses are ranking, not retrieval.** Of the 9 questions hybrid misses in the top 6, 6
+  were among the candidates. Only 3 (`a01`, `n04` and `m25`) were found by neither retriever.
+- **A passage found by only one retriever can't beat one found by both.** With RRF k = 60, a
+  passage in both lists scores at least 2/(60 + 20) = 0.025, while a passage in one list scores at
+  most 1/61 ≈ 0.016. So a passage found by one retriever only reaches the top 6 when fewer than six
+  passages are in both lists. Every passage that only BM25 found, at any chunk size, was lost this
+  way (`m02` at 300, `m28`, `m01` and `m02` at 400).
+- **What this means for task 4 (re-ranker):** re-ranking the union of candidates could raise
+  hybrid R@6 to 0.96 and 0.90, a gain of up to 6 questions. It cannot help the 3 that neither
+  retriever finds. Weighting RRF would not fix this, because the both-lists bonus comes from adding
+  scores, not from the weights.
+- **At 200 and 300 tokens, BM25 finds almost nothing dense search doesn't.** Only `m02` at 300.
+  At 400 tokens on the TXT filings, BM25 finds more than dense search does (0.90 against 0.81).
+
+**Run-to-run variance.** Chroma's HNSW index is approximate, and every build of it is slightly
+different. Compared with exact search over the stored vectors, 3 or 4 of the 53 questions got a
+different top 20 in each of four builds at 200 tokens, mostly off-topic questions. In this run,
+`m06` dropped from dense rank 1 to 18 at 200 tokens, which moved dense R@6 on the TXT questions from
+0.90 to 0.86 and changed the hybrid MRR. Six more builds, run on their own, all put it back at
+rank 1, and the cause was not found. The 300 and 400 token rows matched the previous run exactly.
+Treat a difference of one question at 200 tokens as noise.
+
 ## Tables in HTML
 
 The HTML loader writes a table as one paragraph, one row per line, so the chunker keeps a table

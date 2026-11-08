@@ -140,9 +140,12 @@ guarantee" section is updated with what it now catches and what it still misses.
 ## 4. Cross-encoder re-ranker
 
 **Why:** RRF only combines two rankings. A cross-encoder reads the question and the passage
-together, which usually ranks the evidence higher. Hybrid R@1 is 0.52 today, so the answer is often
-in the top 6 but not first. Three questions are missed completely (a01, m02, n04), and a re-ranker
-cannot help those unless the passage is among the candidates.
+together, which usually ranks the evidence higher. Measured at 400 tokens (`results.md`, "Candidates
+before fusion" in `decisions.md`): hybrid misses 9 of 45 questions in the top 6, and 6 of them were
+among the retrievers' top 20 candidates but were dropped by RRF (`a25`, `m28`, `n24`, `m01`, `m02`,
+`n02`). Re-ranking the union of candidates could raise R@6 to 0.96 (HTML) and 0.90 (TXT). The other
+3 (`a01`, `n04`, `m25`) are found by neither retriever, and a re-ranker cannot help those. Report
+"Either R@20" next to the re-ranked R@6 to see how much of that gap is closed.
 
 **Research first.** Do not assume `bge-reranker-base` is the best choice. Compare candidates on:
 - CPU latency for re-ranking 20–40 passages of about 400 tokens, measured on this machine.
