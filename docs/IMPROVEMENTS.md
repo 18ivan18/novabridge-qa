@@ -32,6 +32,8 @@ Work through these in order. Each task is written so an agent can start it cold.
 - [ ] 8. PDF loader (M8b, part 2)
 - [ ] 9. A separate database for production, such as pgvector, keeping our BM25
 - [ ] 10. LLM-as-judge
+- [ ] 11. Keep HTML table columns aligned. **Next**, before task 3: it produces wrong figures with
+      citations.
 
 ---
 
@@ -302,6 +304,48 @@ results.
 
 ---
 
+## 11. Keep HTML table columns aligned
+
+**Why:** the HTML loader drops every empty table cell (`_render_table` in
+`ingestion/loaders/html.py`). That removes the spacer cells inline XBRL tables are full of, but a
+row with a blank in the middle then shifts every later cell one column to the left. Found by the
+answer eval (`a25`, see `backend/eval/decisions.md`). Apple's share repurchase table renders as:
+
+```
+Periods | Total Number of Shares Purchased | Average Price Paid Per Share | Total ... Under Plans or Programs | Approximate Dollar Value ... That May Yet Be Purchased (1)
+Open market and privately negotiated purchases | 27,594 | $317.45 | 27,594
+Total | 81,767 | $114,004
+```
+
+$114,004 million is the authorization left to spend, in the last column, but it lands under
+"Average Price Paid Per Share". The first answer run reported it as the cost of the buybacks, with a
+citation. With the re-ranker `a25` now answers from a text passage, so the eval no longer shows the
+error, but every table with gaps is still misaligned.
+
+**Fix:**
+- Place each cell in its real column, counting `colspan` (and `rowspan` if the filings use it).
+- Drop only the columns that are empty in every row: those are the spacers. A blank in one row stays
+  as an empty cell, so the Total row becomes `Total | 81,767 | | | $114,004`.
+- Keep merging `$` into the next cell and `)` and `%` into the previous one, now within the grid,
+  so a merged symbol does not leave a column behind.
+- Header rows that span several columns (such as `2026` over three cells) must still line up with
+  the values under them.
+
+**Scope:**
+- Unit tests: the repurchase-table shape (a row with gaps in the middle), `colspan` headers over
+  values, symbols in their own cells, and the existing table tests unchanged.
+- Measure on the six filings: how many table rows change, and spot-check some of each kind against
+  the filing in a browser.
+- Rows with gaps get longer, so some chunk boundaries move. Re-index, re-run `run_eval.py`, and
+  re-run the answer eval (`--only` for the questions whose retrieved text changed, to save the Groq
+  budget).
+
+**Done when:** the repurchase table keeps $114,004 in its own column, both evals are re-run with
+before-and-after numbers in the pull request, and the "Tables in HTML" section of
+`backend/eval/decisions.md` describes the new rendering.
+
+---
+
 ## Other open items
 
 Smaller things found along the way, to fit in where convenient:
@@ -318,9 +362,6 @@ Smaller things found along the way, to fit in where convenient:
 - [ ] A clean-clone `docker compose up --build` failed once, and the error was not kept. Three
       later builds passed. Keep the log if it happens again.
 - [ ] On the home screen, the disclaimer is left-aligned rather than in the centred column.
-- [ ] The HTML loader drops empty table cells, so a row with gaps shifts its later cells into the
-      wrong columns. Found by the answer eval (`a25`, see `backend/eval/decisions.md`). Keep the
-      columns aligned, for example by dropping only columns that are empty in every row.
 - [ ] With the re-ranker, 200-token chunks found 40 of 45 questions in the top 6 against 39 at 400,
       in half the search time (`backend/eval/decisions.md`, "Re-ranker"). Re-check `CHUNK_TOKENS`
       with the answer eval before changing it: smaller chunks give the model less context.
