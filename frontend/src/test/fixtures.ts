@@ -11,7 +11,7 @@ export function makePassage(number: number): Passage {
     page: null,
     excerpt: `Anvil fact ${number}.`,
     chunk_id: `doc:${number}`,
-    retrieval: { dense_rank: number, sparse_rank: null, rrf_score: 0.0323 },
+    retrieval: { dense_rank: number, sparse_rank: null, rrf_score: 0.0323, rerank_rank: number },
   };
 }
 
