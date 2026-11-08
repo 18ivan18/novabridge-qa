@@ -24,7 +24,8 @@ Work through these in order. Each task is written so an agent can start it cold.
 - [x] 2. End-to-end answer evaluation. Branch `feat/answer-eval`. A `--repeat` option for several
       runs is left for later.
 - [ ] 3. Every figure in an answer must appear in a passage it cites
-- [ ] 4. Cross-encoder re-ranker
+- [x] 4. Cross-encoder re-ranker. Branch `feat/reranker`. `jina-reranker-v1-tiny-en` on the top 20
+      after RRF; Ivan chose 20 candidates and to keep the dense relevance gate.
 - [ ] 5. Embedder comparison (M8c)
 - [ ] 6. Streaming answers over SSE
 - [ ] 7. Highlight the exact supporting sentence
@@ -320,3 +321,6 @@ Smaller things found along the way, to fit in where convenient:
 - [ ] The HTML loader drops empty table cells, so a row with gaps shifts its later cells into the
       wrong columns. Found by the answer eval (`a25`, see `backend/eval/decisions.md`). Keep the
       columns aligned, for example by dropping only columns that are empty in every row.
+- [ ] With the re-ranker, 200-token chunks found 40 of 45 questions in the top 6 against 39 at 400,
+      in half the search time (`backend/eval/decisions.md`, "Re-ranker"). Re-check `CHUNK_TOKENS`
+      with the answer eval before changing it: smaller chunks give the model less context.

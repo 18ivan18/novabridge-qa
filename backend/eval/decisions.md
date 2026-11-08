@@ -147,7 +147,73 @@ different top 20 in each of four builds at 200 tokens, mostly off-topic question
 `m06` dropped from dense rank 1 to 18 at 200 tokens, which moved dense R@6 on the TXT questions from
 0.90 to 0.86 and changed the hybrid MRR. Six more builds, run on their own, all put it back at
 rank 1, and the cause was not found. The 300 and 400 token rows matched the previous run exactly.
-Treat a difference of one question at 200 tokens as noise.
+Treat a difference of one question at 200 tokens as noise. The next run (with the re-ranker) put
+`m06` back at rank 1 and dense R@6 back at 0.90.
+
+## Re-ranker
+
+A cross-encoder re-ranks the top 20 passages after RRF (`RERANK_CANDIDATES`), and the top 6 of
+its order go to the model. It runs on ONNX through fastembed, which was already a dependency.
+
+**Choosing the model.** Every cross-encoder in fastembed 0.9.1 was compared with a one-off script on
+the same saved candidates: 400 tokens, all six filings, each model in its own process on this
+machine (Apple Silicon, CPU). Latency is one re-ranking call for 20 passages, without retrieval.
+
+| Model | License | Size | R@6 HTM / TXT | MRR HTM / TXT | Median latency |
+|---|---|---|---|---|---|
+| none (hybrid) | | | 0.83 / 0.76 | 0.684 / 0.496 | |
+| **`jinaai/jina-reranker-v1-tiny-en`** | Apache 2.0 | 0.13 GB | **0.92 / 0.81** | 0.715 / 0.676 | **568 ms** |
+| `jinaai/jina-reranker-v1-turbo-en` | Apache 2.0 | 0.15 GB | 0.83 / 0.81 | 0.649 / 0.513 | 947 ms |
+| `Xenova/ms-marco-MiniLM-L-6-v2` | Apache 2.0 | 0.08 GB | 0.83 / 0.81 | 0.584 / 0.611 | 630 ms |
+| `Xenova/ms-marco-MiniLM-L-12-v2` | Apache 2.0 | 0.12 GB | 0.83 / 0.81 | 0.649 / 0.607 | 1,288 ms |
+| `BAAI/bge-reranker-base` | MIT | 1.04 GB | 0.92 / 0.81 | 0.705 / 0.567 | 4,623 ms |
+| `BAAI/bge-reranker-v2-m3-int8` | Apache 2.0 | 0.57 GB | 0.88 / 0.81 | 0.818 / 0.639 | 5,757 ms |
+
+- **jina-tiny** reaches the ceiling for 20 candidates (the evidence is in the fused top 20 for
+  0.92 and 0.81 of the questions) and is the fastest. It was chosen.
+- **bge-reranker-v2-m3-int8** ranks the evidence higher (HTM R@1 0.75 against 0.58), but is ten
+  times slower and peaked at 3.3 GB. Too slow for a question someone is waiting on, on CPU.
+- **`bge-reranker-v2-m3` at full precision was not measured.** It is a 2.3 GB download, larger and
+  slower than the int8 version, so it was ruled out on size and latency.
+- **`jina-reranker-v2-base-multilingual` was not considered:** its CC-BY-NC license forbids
+  commercial use.
+
+**The re-ranker reads the indexed text,** with the title and section header, not the bare chunk.
+Without the header jina-tiny fell to R@6 0.83 / 0.62 and MRR 0.559 / 0.531, below no re-ranker at
+all on the TXT questions: three years of filings by the same company look alike without it.
+
+**20 candidates, not all of them.** Re-ranking every candidate (up to 40) would raise the ceiling
+to 0.96 / 0.90. With jina-tiny it gave 0.88 / 0.90, so one HTM question fewer and two TXT
+questions more, for about 1 s instead of 0.55 s. Ivan chose 20. The 3 passages left out (`m01`,
+`m02`, `m28` at 400 tokens) are the ones only BM25 found, which RRF ranks below 20.
+
+**Input length.** The longest question and indexed passage is 447 jina tokens at 400 chunk tokens,
+under the 512 the model reads, so nothing is cut off. A larger `CHUNK_TOKENS` would need checking.
+
+**Memory.** Measured in one process: the model adds about 360 MB. Re-ranking 20 passages peaks about
+800 MB above that at batch size 8 and 1.3 GB at 32, at the same speed, so the batch size is 8.
+
+**Results** (`results.md`, re-ranked against hybrid):
+
+| Chunk tokens | R@6 HTM / TXT | MRR HTM / TXT | Median search |
+|---|---|---|---|
+| 200 | 0.88 / 0.90 (was 0.83 / 0.81) | 0.705 / 0.666 (was 0.710 / 0.503) | 277 ms (was 7) |
+| 300 | 0.92 / 0.86 (was 0.88 / 0.86) | 0.654 / 0.748 (was 0.684 / 0.552) | 390 ms (was 7) |
+| 400 | 0.92 / 0.81 (was 0.83 / 0.76) | 0.715 / 0.676 (was 0.684 / 0.496) | 525 ms (was 8) |
+
+- At 400 tokens re-ranking finds `a25`, `n24` and `n02` in the top 6. It loses nothing hybrid had.
+- The biggest gain is on the TXT questions' R@1, from 0.33 to 0.62.
+- **Smaller chunks are now worth another look.** At 200 tokens re-ranking finds 40 of 45 in the top
+  6 against 39 at 400, in half the time, because the cross-encoder's cost grows with passage length.
+  The gap is one question, on the questions used for tuning, and smaller chunks give the model
+  less context per passage, so `CHUNK_TOKENS` stays at 400. Re-check with the answer eval first.
+
+**Relevance gate.** It still checks dense similarity, now the best among all the candidates before
+re-ranking. That is what `run_eval.py` tuned `MIN_RELEVANCE` on, and it keeps re-ranking from
+changing which questions are refused. Re-ranker scores were not used for the gate: jina-tiny's best
+score for an answerable question went as low as 1.14, while in-domain unanswerable `u09` scored
+1.78, so no threshold separates them. Its scores are also uncalibrated logits that
+change with the model.
 
 ## Tables in HTML
 
@@ -187,3 +253,26 @@ still scored wrong was read too. They are listed below.
 | `a25` | **A real error.** The HTML loader drops empty table cells, which shifts later cells to the left. In the share repurchase table, the remaining authorization ($114,004 million) moved under the price column, and the model reported it as the cost of the buybacks. |
 
 The `a25` error needs a loader fix: keep a table's columns aligned when a row has empty cells.
+
+### With the re-ranker
+
+Second run, `2026-11-08-openai-gpt-oss-120b`, same model and questions, no pattern changed. Its
+header records commit `323773e`, but it ran on the re-ranker code from the working tree, before that
+code was committed as `b1dd9ac` (same content).
+
+| Questions | Correct, before → with re-ranker | Evidence cited | Cited only the other filing |
+|---|---|---|---|
+| HTM filings (24) | 21 → 23 | 20 → 22 | 1 → 0 |
+| TXT filings (21) | 15 → 17 | 15 → 16 | 2 → 1 |
+
+- **Became correct:** `a25`, `n24`, `n02` (now retrieved in the top 6) and `m02`. `m02`'s evidence
+  passage is still not retrieved, but another passage with the same $4,379 million was.
+- **Became wrong:** none. `a07` is still correct but now cites other passages stating the 28% tax
+  rate rather than the evidence passage.
+- **Still wrong, as before:** `a01`, `n04`, `m25` are found by neither retriever and the model
+  refused. `m01` and `m04` are old questions without a year, answered from the 2026 filing.
+- **`a25` no longer shows the table bug** because the answer now comes from a text passage about the
+  buyback. The loader still misaligns the table, so the fix is still needed.
+- **Latency:** the median answer went from 0.8 s to 1.5 s. Retrieval went from 26 ms to 585 ms
+  (the re-ranker); generation stayed at about 0.8 s. All 8 unanswerable questions were still refused,
+  3 by the gate and 5 by the model.
