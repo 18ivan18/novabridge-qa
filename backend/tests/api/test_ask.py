@@ -29,7 +29,7 @@ def test_answer_has_the_documented_shape(make_client: ClientFactory) -> None:
             "page": None,
             "excerpt": "Anvil fact 2.",
             "chunk_id": "doc:2",
-            "retrieval": {"dense_rank": 2, "sparse_rank": 3, "rrf_score": 0.0323},
+            "retrieval": {"dense_rank": 2, "sparse_rank": 3, "rrf_score": 0.0323, "rerank_rank": 2},
         }
     ]
     assert set(body["timings_ms"]) == {"retrieval", "generation"}

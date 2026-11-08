@@ -6,6 +6,7 @@ from datetime import UTC, date, datetime
 from fastapi.testclient import TestClient
 
 from novabridge_qa.domain.models import Chunk, Document, ScoredPassage, SearchFilters
+from novabridge_qa.retrieval.hybrid import SearchResult
 
 DOCUMENT = Document(
     title="ACME Corp · Form 10-K",
@@ -22,7 +23,16 @@ DOCUMENT = Document(
 
 def make_passage(number: int, similarity: float = 0.9) -> ScoredPassage:
     chunk = Chunk(f"doc:{number}", "doc", f"Anvil fact {number}.", "Item 1 — Business", None, 0, 1)
-    return ScoredPassage(chunk, DOCUMENT, number, number + 1, 0.0323, similarity)
+    return ScoredPassage(
+        chunk,
+        DOCUMENT,
+        number,
+        number + 1,
+        0.0323,
+        similarity,
+        rerank_rank=number,
+        rerank_score=1.0,
+    )
 
 
 class StubRetriever:
@@ -30,11 +40,10 @@ class StubRetriever:
         self.passages = passages
         self.calls: list[tuple[int, SearchFilters | None]] = []
 
-    def search(
-        self, query: str, k: int, filters: SearchFilters | None = None
-    ) -> list[ScoredPassage]:
+    def retrieve(self, query: str, k: int, filters: SearchFilters | None = None) -> SearchResult:
         self.calls.append((k, filters))
-        return self.passages[:k]
+        similarities = [p.dense_similarity for p in self.passages if p.dense_similarity]
+        return SearchResult(self.passages[:k], max(similarities, default=None))
 
 
 ClientFactory = Callable[..., TestClient]

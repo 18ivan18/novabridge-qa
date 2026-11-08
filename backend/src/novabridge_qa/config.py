@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     retrieval_candidates: int = 20
     top_k: int = 6
     rrf_k: int = 60
+    # Empty turns re-ranking off. Re-ranks the top RERANK_CANDIDATES passages after fusion.
+    reranker_model: str = "jinaai/jina-reranker-v1-tiny-en"
+    rerank_candidates: int = 20
     min_relevance: float = 0.58
     max_upload_mb: int = 20
     # NoDecode: pydantic-settings would otherwise parse list fields as JSON and reject a plain URL.

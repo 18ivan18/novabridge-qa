@@ -63,7 +63,8 @@ def indexed_text(chunk: Chunk, document: Document) -> str:
 
 @dataclass(frozen=True)
 class ScoredPassage:
-    """A retrieved chunk. Ranks start at 1; None means that retriever did not return it."""
+    """A retrieved chunk. Ranks start at 1; None means that retriever did not return it, or that
+    the passage was not re-ranked."""
 
     chunk: Chunk
     document: Document
@@ -71,3 +72,6 @@ class ScoredPassage:
     sparse_rank: int | None
     rrf_score: float
     dense_similarity: float | None
+    rerank_rank: int | None = None
+    # Raw cross-encoder output: comparable only within one search, not across questions or models.
+    rerank_score: float | None = None
