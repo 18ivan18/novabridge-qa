@@ -49,8 +49,9 @@ from novabridge_qa.qa.service import Answer, QAService
 
 EVAL_DIR = Path(__file__).parent
 RUNS_DIR = EVAL_DIR / "answer_runs"
-# Groq's free tier allows about 8,000 tokens a minute. This leaves room for the SDK's one retry.
-DEFAULT_TOKENS_PER_MINUTE = 6000
+# Groq's free tier allows about 8,000 tokens a minute. 7,000 fits two questions of about 3,300
+# tokens a minute and leaves room for the SDK's one retry; 6,000 fitted only one.
+DEFAULT_TOKENS_PER_MINUTE = 7000
 # What a question costs before any has been measured: about 3,000 tokens with six passages.
 ASSUMED_TOKENS_PER_QUESTION = 3000
 WINDOW_SECONDS = 60.0
@@ -405,7 +406,8 @@ def question_table(results: Sequence[Result]) -> str:
         else:
             outcome = f"refused ({r.refusal})"
         tokens = "—" if r.input_tokens is None else f"{r.input_tokens + (r.output_tokens or 0):,}"
-        missing = ", ".join(f"`{fact}`" for fact in r.missing_facts) or "—"
+        # A pipe ends a markdown table cell, even inside backticks.
+        missing = ", ".join(f"`{fact}`".replace("|", "\\|") for fact in r.missing_facts) or "—"
         lines.append(
             f"| {r.id} | {r.question_set} | {outcome} | {_flag(r.correct)} "
             f"| {_flag(r.evidence_cited)} | {', '.join(r.cited_filings) or '—'} | {missing} "

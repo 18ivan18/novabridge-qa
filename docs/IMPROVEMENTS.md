@@ -21,7 +21,8 @@ Work through these in order. Each task is written so an agent can start it cold.
 
 - [x] 1. HTML loader, and index the 2026 10-Ks (M8b, part 1). Branch `feat/html-loader`. Ivan
       approved the new questions and tried them in the UI.
-- [ ] 2. End-to-end answer evaluation
+- [x] 2. End-to-end answer evaluation. Branch `feat/answer-eval`. A `--repeat` option for several
+      runs is left for later.
 - [ ] 3. Every figure in an answer must appear in a passage it cites
 - [ ] 4. Cross-encoder re-ranker
 - [ ] 5. Embedder comparison (M8c)
@@ -313,3 +314,6 @@ Smaller things found along the way, to fit in where convenient:
 - [ ] A clean-clone `docker compose up --build` failed once, and the error was not kept. Three
       later builds passed. Keep the log if it happens again.
 - [ ] On the home screen, the disclaimer is left-aligned rather than in the centred column.
+- [ ] The HTML loader drops empty table cells, so a row with gaps shifts its later cells into the
+      wrong columns. Found by the answer eval (`a25`, see `backend/eval/decisions.md`). Keep the
+      columns aligned, for example by dropping only columns that are empty in every row.
