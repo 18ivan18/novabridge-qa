@@ -19,13 +19,14 @@ import json
 import re
 import statistics
 import tempfile
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import get_args
 
 from novabridge_qa.config import Settings
-from novabridge_qa.container import build_embedder
+from novabridge_qa.container import build_embedder, build_reranker
 from novabridge_qa.domain.models import DocumentMeta, ScoredPassage
 from novabridge_qa.ingestion.corpus import load_corpus
 from novabridge_qa.ingestion.loaders import load_file
@@ -33,6 +34,7 @@ from novabridge_qa.ingestion.pipeline import ingest_file
 from novabridge_qa.retrieval.dense import DenseIndex
 from novabridge_qa.retrieval.embedder import Embedder
 from novabridge_qa.retrieval.hybrid import HybridRetriever, SearchMode
+from novabridge_qa.retrieval.reranker import Reranker
 from novabridge_qa.retrieval.sparse import SparseIndex
 
 EVAL_DIR = Path(__file__).parent
@@ -172,7 +174,11 @@ def validate(questions: Sequence[Question], texts: dict[str, str]) -> None:
 
 
 def build_retriever(
-    settings: Settings, embedder: Embedder, chunk_tokens: int, directory: Path
+    settings: Settings,
+    embedder: Embedder,
+    reranker: Reranker | None,
+    chunk_tokens: int,
+    directory: Path,
 ) -> tuple[HybridRetriever, DenseIndex]:
     dense = DenseIndex(directory, settings.embedding_model)
     for path, meta in load_corpus(settings.data_dir / "raw"):
@@ -190,6 +196,8 @@ def build_retriever(
         SparseIndex.build(dense.all_passages()),
         candidates=settings.retrieval_candidates,
         rrf_k=settings.rrf_k,
+        reranker=reranker,
+        rerank_candidates=settings.rerank_candidates,
     )
     return retriever, dense
 
@@ -275,21 +283,31 @@ def main() -> None:
     answerable = [q for q in questions if q.evidence]
     sets = question_sets(answerable, {key: path.suffix.lower() for path, key in keys})
     embedder = build_embedder(settings)
+    reranker = build_reranker(settings)
 
     rows: list[Row] = []
     candidate_rows: list[tuple[int, str, CandidateRecall]] = []
     misses: list[str] = []
     gate_sections: list[str] = []
+    latencies: list[str] = []
     for chunk_tokens in CHUNK_SIZES:
         with tempfile.TemporaryDirectory() as directory:
-            retriever, dense = build_retriever(settings, embedder, chunk_tokens, Path(directory))
+            retriever, dense = build_retriever(
+                settings, embedder, reranker, chunk_tokens, Path(directory)
+            )
             ranks_by_mode: dict[str, list[int | None]] = {}
             for mode in get_args(SearchMode):
-                ranks = [
-                    first_hit_rank(retriever.search(q.question, max(K_VALUES), mode=mode), q)
-                    for q in answerable
-                ]
+                ranks, seconds = [], []
+                for q in answerable:
+                    started = time.perf_counter()
+                    passages = retriever.search(q.question, max(K_VALUES), mode=mode)
+                    seconds.append(time.perf_counter() - started)
+                    ranks.append(first_hit_rank(passages, q))
                 ranks_by_mode[mode] = ranks
+                latencies.append(
+                    f"| {chunk_tokens} | {mode} | {statistics.median(seconds) * 1000:.0f} "
+                    f"| {max(seconds) * 1000:.0f} |"
+                )
                 for name, positions in sets.items():
                     scores = score([ranks[p] for p in positions], K_VALUES)
                     rows.append(Row(chunk_tokens, dense.count_chunks(), mode, name, scores))
@@ -325,6 +343,8 @@ def main() -> None:
             "# Retrieval evaluation",
             f"Embedder: `{settings.embedding_model}`. Overlap: {settings.chunk_overlap} tokens. "
             f"Candidates per retriever: {settings.retrieval_candidates}. RRF k: {settings.rrf_k}. "
+            f"Re-ranker: `{settings.reranker_model or 'off'}` on the top "
+            f"{settings.rerank_candidates} after fusion. "
             f"Filings indexed: {len(corpus)}. Questions: {len(answerable)} answerable, "
             f"{len(questions) - len(answerable)} unanswerable. Unfiltered searches over all "
             "filings; a question counts as found only in the filing it names.",
@@ -340,6 +360,11 @@ def main() -> None:
             "A rank of None means the passage was not in the top "
             f"{max(K_VALUES)}.\n\n| Chunk tokens | Mode | Question | Rank |\n|---|---|---|---|\n"
             + "\n".join(misses),
+            "## Search latency",
+            "Wall time of one search on this machine, embedding the question included. One run, "
+            "so only differences of tens of milliseconds mean anything.\n\n"
+            "| Chunk tokens | Mode | Median ms | Max ms |\n|---|---|---|---|\n"
+            + "\n".join(latencies),
             "## Relevance gate (MIN_RELEVANCE)",
             *gate_sections,
         ]
