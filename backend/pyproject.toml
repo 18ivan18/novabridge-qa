@@ -4,14 +4,15 @@ version = "0.1.0"
 description = "NovaBridge financial analyst Q&A assistant: grounded answers with verifiable citations."
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "anthropic>=2.6.0",
     "beautifulsoup4>=4.15.0",
     "bm25s>=0.3.16",
     "chromadb>=1.5.9",
     "fastapi>=0.162.0",
     "fastembed>=0.9.1",
+    "llama-index-core==0.14.25",
+    "llama-index-llms-openai-like==0.8.1",
     "lxml>=6.1.3",
-    "openai>=3.46.0",
+    "openai>=2,<3",
     "pydantic>=2",
     "pydantic-settings>=2.16.2",
     "pystemmer>=3.1.0",
@@ -53,7 +54,7 @@ plugins = ["pydantic.mypy"]
 
 # These libraries ship no type information.
 [[tool.mypy.overrides]]
-module = ["bm25s.*", "Stemmer"]
+module = ["bm25s.*", "Stemmer", "llama_index.llms.openai_like.*"]
 ignore_missing_imports = true
 
 # Optional: not installed unless the sentence-transformers extra is.
@@ -64,7 +65,7 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # These are not packages, so make them importable for tests.
-pythonpath = ["scripts", "eval", "tests/api"]
+pythonpath = ["scripts", "eval", "tests", "tests/api"]
 # importlib mode lets tests/unit and tests/api hold same-named files without __init__.py packages.
 addopts = "--import-mode=importlib"
 

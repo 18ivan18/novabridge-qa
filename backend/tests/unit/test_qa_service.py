@@ -3,10 +3,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from scripted_llm import FakeLLM
 
 from novabridge_qa.domain.models import Chunk, Document, ScoredPassage, SearchFilters
 from novabridge_qa.llm.base import Completion, LLMError
-from novabridge_qa.llm.fake import FakeLLM
 from novabridge_qa.qa.prompt import SYSTEM_PROMPT
 from novabridge_qa.qa.service import Answer, QAService
 from novabridge_qa.retrieval.dense import DenseIndex

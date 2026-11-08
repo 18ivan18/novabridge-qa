@@ -1,6 +1,6 @@
 """Send one tiny request to the configured LLM provider. This calls a real, possibly paid API.
 
-Run from backend/: uv run python scripts/llm_smoke.py [--provider anthropic]
+Run from backend/: uv run python scripts/llm_smoke.py
 """
 
 import argparse
@@ -13,12 +13,9 @@ from novabridge_qa.llm.factory import build_llm
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--provider", choices=["openai_compatible", "anthropic"])
-    args = parser.parse_args()
+    argparse.ArgumentParser(description=__doc__).parse_args()
 
-    overrides = {"llm_provider": args.provider} if args.provider else {}
-    settings = Settings(**overrides)
+    settings = Settings()
     llm = build_llm(settings)
 
     started = time.perf_counter()

@@ -15,18 +15,12 @@ def test_defaults_need_no_env_file() -> None:
     assert settings.rrf_k == 60
 
 
-def test_anthropic_provider_without_key_fails_fast(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_anthropic_provider_fails_fast(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Not available on the LlamaIndex branch: see docs/LLAMAINDEX_SPIKE.md, "Corrections".
     monkeypatch.setenv("LLM_PROVIDER", "anthropic")
 
-    with pytest.raises(ValidationError, match="requires ANTHROPIC_API_KEY"):
+    with pytest.raises(ValidationError, match="openai_compatible"):
         Settings(_env_file=None)
-
-
-def test_anthropic_provider_with_key_is_accepted(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("LLM_PROVIDER", "anthropic")
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-
-    assert Settings(_env_file=None).llm_provider == "anthropic"
 
 
 def test_unknown_provider_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:

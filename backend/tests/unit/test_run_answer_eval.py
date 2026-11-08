@@ -14,10 +14,10 @@ from run_answer_eval import (
     score_run,
 )
 from run_eval import Question
+from scripted_llm import FakeLLM
 
 from novabridge_qa.domain.models import Chunk, Document, ScoredPassage, SearchFilters
 from novabridge_qa.llm.base import Completion, LLMError, RateLimitError
-from novabridge_qa.llm.fake import FakeLLM
 from novabridge_qa.qa.service import QAService
 from novabridge_qa.retrieval.hybrid import SearchResult
 

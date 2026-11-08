@@ -17,13 +17,13 @@ class Settings(BaseSettings):
         env_file=("../.env", ".env"), extra="ignore", hide_input_in_errors=True
     )
 
-    llm_provider: Literal["openai_compatible", "anthropic"] = "openai_compatible"
+    # Only provider on the LlamaIndex branch: llama-index-llms-anthropic 0.12.3 cannot build a
+    # request with anthropic SDK 2.x (see docs/LLAMAINDEX_SPIKE.md, "Corrections").
+    llm_provider: Literal["openai_compatible"] = "openai_compatible"
     llm_base_url: str = "https://api.groq.com/openai/v1"
     # SecretStr keeps keys out of logs and tracebacks: repr() prints asterisks.
     llm_api_key: SecretStr = SecretStr("")
     llm_model: str = ""
-    anthropic_api_key: SecretStr = SecretStr("")
-    anthropic_model: str = ""
     llm_temperature: float = 0.1
     # Thinking models spend this budget on reasoning too, so it is well above a short answer.
     llm_max_tokens: int = 4096
@@ -61,8 +61,6 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def check_consistency(self) -> Self:
         """Fail at startup with a clear message, not on an analyst's first question."""
-        if self.llm_provider == "anthropic" and not self.anthropic_api_key.get_secret_value():
-            raise ValueError("LLM_PROVIDER=anthropic requires ANTHROPIC_API_KEY to be set")
         if self.chunk_overlap >= self.chunk_tokens:
             raise ValueError("CHUNK_OVERLAP must be smaller than CHUNK_TOKENS")
         return self

@@ -6,10 +6,10 @@ import pytest
 from api_helpers import ClientFactory, StubRetriever, make_passage
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from scripted_llm import FakeLLM
 
 from novabridge_qa.api.deps import get_qa_service
 from novabridge_qa.config import Settings
-from novabridge_qa.llm.fake import FakeLLM
 from novabridge_qa.main import create_app
 from novabridge_qa.qa.service import QAService
 
