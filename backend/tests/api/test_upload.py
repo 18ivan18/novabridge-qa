@@ -11,7 +11,7 @@ from httpx import Response
 from novabridge_qa.api.deps import get_upload_service
 from novabridge_qa.container import Container, rebuild_sparse_index
 from novabridge_qa.domain.models import SearchFilters
-from novabridge_qa.ingestion import uploads
+from novabridge_qa.ingestion import pipeline
 from novabridge_qa.ingestion.uploads import UploadService
 from novabridge_qa.retrieval.embedder import Embedder, FakeEmbedder
 from novabridge_qa.retrieval.hybrid import HybridRetriever
@@ -193,7 +193,8 @@ def test_file_with_no_text_is_rejected_at_once(harness: Harness) -> None:
 
     assert response.status_code == 422
     assert response.json() == {"detail": "No text was found in this file."}
-    assert list(harness.uploads_dir.iterdir()) == []
+    # glob, not iterdir: the folder itself is not created for a rejected file.
+    assert list(harness.uploads_dir.glob("*")) == []
 
 
 def test_file_too_short_to_chunk_fails_its_job(harness: Harness) -> None:
@@ -239,7 +240,7 @@ def test_failed_upload_can_be_retried(app: FastAPI) -> None:
 def test_progress_follows_the_embedding_batches(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(uploads, "EMBED_BATCH", 1)
+    monkeypatch.setattr(pipeline, "EMBED_BATCH", 1)
     seen: list[tuple[str, int]] = []
 
     class WatchingEmbedder(FakeEmbedder):

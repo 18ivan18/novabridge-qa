@@ -22,29 +22,29 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["questions"])
 
 
-def _passage_fields(passage: ScoredPassage) -> dict[str, object]:
+def _to_passage(passage: ScoredPassage) -> PassageResponse:
     document, chunk = passage.document, passage.chunk
-    return {
-        "doc_id": document.doc_id,
-        "title": document.title,
-        "ticker": document.ticker,
-        "doc_type": document.doc_type,
-        "period_end": document.period_end,
-        "section": chunk.section,
-        "page": chunk.page,
-        "excerpt": chunk.text,
-        "chunk_id": chunk.chunk_id,
-        "retrieval": RetrievalInfo(
+    return PassageResponse(
+        doc_id=document.doc_id,
+        title=document.title,
+        ticker=document.ticker,
+        doc_type=document.doc_type,
+        period_end=document.period_end,
+        section=chunk.section,
+        page=chunk.page,
+        excerpt=chunk.text,
+        chunk_id=chunk.chunk_id,
+        retrieval=RetrievalInfo(
             dense_rank=passage.dense_rank,
             sparse_rank=passage.sparse_rank,
             rrf_score=passage.rrf_score,
             rerank_rank=passage.rerank_rank,
         ),
-    }
+    )
 
 
 def _to_source(source: Source) -> SourceResponse:
-    return SourceResponse.model_validate({"id": source.id, **_passage_fields(source.passage)})
+    return SourceResponse(id=source.id, **_to_passage(source.passage).model_dump())
 
 
 def _to_filters(request: AskRequest) -> SearchFilters | None:
@@ -79,8 +79,6 @@ def ask(request: AskRequest, service: QAServiceDep) -> AskResponse:
         answer=answer.text,
         insufficient_evidence=answer.insufficient_evidence,
         sources=[_to_source(source) for source in answer.sources],
-        retrieved=[
-            PassageResponse.model_validate(_passage_fields(passage)) for passage in answer.retrieved
-        ],
+        retrieved=[_to_passage(passage) for passage in answer.retrieved],
         timings_ms=Timings(retrieval=answer.retrieval_ms, generation=answer.generation_ms),
     )

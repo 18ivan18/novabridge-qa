@@ -26,6 +26,11 @@ class SearchResult:
     best_similarity: float | None
 
 
+def _ranks(chunk_ids: list[str]) -> dict[str, int]:
+    """Map each chunk id to its 1-based rank in one retriever's list."""
+    return {chunk_id: rank for rank, chunk_id in enumerate(chunk_ids, start=1)}
+
+
 class Retriever(Protocol):
     def retrieve(
         self, query: str, k: int, filters: SearchFilters | None = None
@@ -97,6 +102,8 @@ class HybridRetriever:
         missing = [chunk_id for chunk_id, _ in fused if chunk_id not in stored]
         stored.update(self._dense.get(missing))
 
+        dense_ranks = _ranks(dense_ids)
+        sparse_ranks = _ranks(sparse_ids)
         passages = []
         for chunk_id, score in fused:
             chunk, document = stored[chunk_id]
@@ -105,8 +112,8 @@ class HybridRetriever:
                 ScoredPassage(
                     chunk=chunk,
                     document=document,
-                    dense_rank=dense_ids.index(chunk_id) + 1 if chunk_id in dense_ids else None,
-                    sparse_rank=sparse_ids.index(chunk_id) + 1 if chunk_id in sparse_ids else None,
+                    dense_rank=dense_ranks.get(chunk_id),
+                    sparse_rank=sparse_ranks.get(chunk_id),
                     rrf_score=score,
                     dense_similarity=hit.similarity if hit else None,
                 )

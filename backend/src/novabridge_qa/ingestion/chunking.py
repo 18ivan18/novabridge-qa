@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from typing import Protocol
 
-from novabridge_qa.domain.models import Chunk
+from novabridge_qa.domain.models import Chunk, make_chunk_id
 from novabridge_qa.ingestion.sections import Section
 
 MIN_CHUNK_TOKENS = 30
@@ -112,7 +112,7 @@ def chunk_document(
             start, end = window[0].start, window[-1].end
             chunks.append(
                 Chunk(
-                    chunk_id=f"{doc_id}:{len(chunks)}",
+                    chunk_id=make_chunk_id(doc_id, len(chunks)),
                     doc_id=doc_id,
                     text=text[start:end],
                     section=section.title,

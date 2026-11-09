@@ -11,7 +11,14 @@ import chromadb
 from chromadb.api.types import GetResult
 from chromadb.config import Settings as ChromaSettings
 
-from novabridge_qa.domain.models import Chunk, DocSource, DocType, Document, SearchFilters
+from novabridge_qa.domain.models import (
+    Chunk,
+    DocSource,
+    DocType,
+    Document,
+    SearchFilters,
+    make_chunk_id,
+)
 
 COLLECTION = "chunks"
 
@@ -109,7 +116,7 @@ class DenseIndex:
         self._max_batch_size = max_batch_size or client.get_max_batch_size()
 
     def has_document(self, doc_id: str) -> bool:
-        return bool(self._collection.get(ids=[f"{doc_id}:0"], include=[])["ids"])
+        return bool(self._collection.get(ids=[make_chunk_id(doc_id, 0)], include=[])["ids"])
 
     def add(
         self, document: Document, chunks: Sequence[Chunk], embeddings: Sequence[Sequence[float]]
@@ -199,4 +206,6 @@ class DenseIndex:
         return len(self._collection.get(where={"doc_id": doc_id}, include=[])["ids"])
 
     def count_documents(self) -> int:
-        return len(self.documents())
+        # The health check calls this, so it reads metadata only and builds no Document objects.
+        metadatas = self._collection.get(include=["metadatas"])["metadatas"] or []
+        return len({metadata["doc_id"] for metadata in metadatas})

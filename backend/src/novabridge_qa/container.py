@@ -63,16 +63,29 @@ def build_reranker(settings: Settings) -> Reranker | None:
     return FastEmbedReranker(settings.reranker_model) if settings.reranker_model else None
 
 
-def build_retriever(settings: Settings, embedder: Embedder, dense: DenseIndex) -> HybridRetriever:
+def make_retriever(
+    settings: Settings,
+    embedder: Embedder,
+    dense: DenseIndex,
+    sparse: SparseIndex,
+    reranker: Reranker | None,
+) -> HybridRetriever:
+    """The retriever from parts already built. The evaluation uses this too, so it always
+    measures the settings the app runs with."""
     return HybridRetriever(
         embedder,
         dense,
-        load_sparse_index(settings, dense),
+        sparse,
         candidates=settings.retrieval_candidates,
         rrf_k=settings.rrf_k,
-        reranker=build_reranker(settings),
+        reranker=reranker,
         rerank_candidates=settings.rerank_candidates,
     )
+
+
+def build_retriever(settings: Settings, embedder: Embedder, dense: DenseIndex) -> HybridRetriever:
+    sparse = load_sparse_index(settings, dense)
+    return make_retriever(settings, embedder, dense, sparse, build_reranker(settings))
 
 
 def build_services(settings: Settings, dense: DenseIndex) -> Services:

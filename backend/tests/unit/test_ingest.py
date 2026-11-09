@@ -5,9 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from novabridge_qa.domain.models import DocumentMeta
+from novabridge_qa.domain.models import DocumentMeta, make_chunk_id, make_doc_id
+from novabridge_qa.ingestion import pipeline
 from novabridge_qa.ingestion.corpus import document_meta, load_corpus
-from novabridge_qa.ingestion.pipeline import ingest_file
+from novabridge_qa.ingestion.loaders import LoadedDocument
+from novabridge_qa.ingestion.pipeline import ingest_file, prepare_document
 from novabridge_qa.retrieval.dense import DenseIndex
 from novabridge_qa.retrieval.embedder import FakeEmbedder
 
@@ -120,3 +122,47 @@ def test_document_meta_maps_10k405_to_10k() -> None:
     assert meta.doc_type == "10-K"
     assert meta.title == "ACME Corp · Form 10-K"
     assert meta.period_end == date(2001, 1, 28)
+
+
+def test_doc_id_is_the_sha256_of_the_bytes_and_chunk_0_marks_a_document() -> None:
+    doc_id = make_doc_id(b"content")
+
+    assert doc_id == "ed7002b439e9ac845f22357d822bac1444730fbdb6016d3ec9432297b9ec9f73"
+    assert make_chunk_id(doc_id, 0) == f"{doc_id}:0"
+
+
+def test_prepare_reports_progress_per_embedding_batch(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(pipeline, "EMBED_BATCH", 2)
+    shares: list[float] = []
+
+    prepared = prepare_document(
+        LoadedDocument(TEXT),
+        META,
+        "doc",
+        FakeEmbedder(),
+        chunk_tokens=100,
+        chunk_overlap=10,
+        on_progress=shares.append,
+    )
+
+    assert len(prepared.embeddings) == len(prepared.chunks) > 2
+    assert shares[0] == 0.0
+    assert shares[-1] == 1.0
+    assert shares == sorted(shares)
+    assert len(shares) == 1 + -(-len(prepared.chunks) // 2)
+
+
+def test_prepare_returns_no_chunks_for_too_little_text() -> None:
+    progress: list[float] = []
+
+    prepared = prepare_document(
+        LoadedDocument("Too short."),
+        META,
+        "doc",
+        FakeEmbedder(),
+        chunk_tokens=100,
+        chunk_overlap=10,
+        on_progress=progress.append,
+    )
+
+    assert (prepared.chunks, prepared.embeddings, progress) == ([], [], [])

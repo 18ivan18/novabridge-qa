@@ -11,6 +11,7 @@ from novabridge_qa.ingestion.loaders import (
     load_file,
     load_html,
     load_text,
+    loader_for,
     strip_edgar_markup,
 )
 
@@ -121,3 +122,9 @@ def test_load_file_dispatches_html_by_suffix(tmp_path: Path) -> None:
     path.write_text("<html><body><p>ACME</p><script>x()</script></body></html>")
 
     assert load_file(path).text == "ACME"
+
+
+def test_loader_for_names_the_accepted_types_when_it_rejects() -> None:
+    with pytest.raises(UnsupportedFormatError, match=r"Accepted types: \.htm, \.html, \.md, \.txt"):
+        loader_for("report.pdf")
+    assert loader_for("REPORT.HTM") is load_html
