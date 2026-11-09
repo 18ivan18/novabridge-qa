@@ -186,8 +186,11 @@ class ChunkStore:
         nodes = self.vector_store.get_nodes(node_ids=list(chunk_ids))
         return {node.node_id: node_passage(node) for node in nodes}
 
+    def all_nodes(self) -> list[BaseNode]:
+        return self.vector_store.get_nodes(node_ids=None)
+
     def all_passages(self) -> list[tuple[Chunk, Document]]:
-        return [node_passage(node) for node in self.vector_store.get_nodes(node_ids=None)]
+        return [node_passage(node) for node in self.all_nodes()]
 
     def matching_ids(self, filters: SearchFilters) -> set[str]:
         where = metadata_filters(filters)

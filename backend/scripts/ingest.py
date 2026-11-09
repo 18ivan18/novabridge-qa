@@ -6,7 +6,7 @@ Run from backend/: uv run python scripts/ingest.py
 import time
 
 from novabridge_qa.config import Settings
-from novabridge_qa.container import build_embedder, build_store, rebuild_sparse_index
+from novabridge_qa.container import build_embedder, build_store, rebuild_bm25
 from novabridge_qa.ingestion.corpus import load_corpus
 from novabridge_qa.ingestion.pipeline import ingest_file
 
@@ -32,8 +32,8 @@ def main() -> None:
             elapsed = time.perf_counter() - started
             print(f"{path.name}: {result.chunks} chunks in {elapsed:.0f}s")
 
-    sparse = rebuild_sparse_index(settings, index)
-    print(f"Index: {index.count_documents()} documents, {len(sparse)} chunks")
+    rebuild_bm25(settings, index)
+    print(f"Index: {index.count_documents()} documents, {index.count_chunks()} chunks")
 
 
 if __name__ == "__main__":

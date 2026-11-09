@@ -248,3 +248,17 @@ Found while building stage 2 (Nov 9, 2026):
 10. **Indexes are not interchangeable with main.** Nodes are stored as JSON in `_node_content`. `ChunkStore` refuses an index written on main (`IndexFormatError`), because ingestion would otherwise skip its documents as already indexed. Each branch needs its own `data/index`.
 11. **`run_eval.py` read the store directly** for the gate table. It now asks the retriever for `best_similarity` in dense mode: the value the gate checks.
 
+
+Found while building stage 3 (Nov 9, 2026):
+
+12. **`pystemmer<3`.** `llama-index-retrievers-bm25` 0.8.0 pins `pystemmer<3`; `main` locks 3.1.0. The spike keeps 3.1.0 through a uv `override-dependencies` entry (approved by Ivan). The BM25 tests cover the stemmer.
+13. **`QueryFusionRetriever` defaults.** `num_queries` defaults to 4, which makes one LLM call per question to write three more queries. When no `llm` is passed it falls back to `Settings.llm`, which is OpenAI. The spike sets `num_queries=1` and passes an LLM that raises if called.
+14. **Fusion overwrites scores in place.** After RRF, a hit's dense similarity and its rank in each list are lost, and the gate, the passage cards and the eval need all three. `RankKeepingFusionRetriever` records them before fusing. It calls two private methods, which is one more reason `llama-index-core` is pinned exactly.
+15. **RRF constant.** LlamaIndex counts ranks from 0 and fixes k at 60, so a hit scores `1/(60+r)`; `main` scored `1/(61+r)`. Order is unchanged on the eval set. `RRF_K` is now validated to be 60, because the setting can no longer change anything.
+16. **`BM25Retriever` edge cases.**
+    - It returns hits with a score of 0, including chunks masked out by a filter. They are dropped, because RRF would still score them by rank.
+    - It raises `ValueError` on an empty corpus, and again when a filter leaves no node. Both cases are checked against Chroma first.
+    - Filters are fixed when the retriever is built, so each filtered request uses a copy that shares the index.
+    - When the index is built in memory rather than loaded, `bm25.corpus` is `None`, and a filtered copy then ignores the filter. The subclass fills it in.
+
+Stage 3 eval: every recall, MRR, candidate-recall, miss and gate row in `eval/results.md` is identical to `main`. Only the latencies differ, within run-to-run noise.

@@ -11,6 +11,7 @@ dependencies = [
     "fastembed>=0.9.1",
     "llama-index-core==0.14.25",
     "llama-index-llms-openai-like==0.8.1",
+    "llama-index-retrievers-bm25==0.8.0",
     "llama-index-vector-stores-chroma==0.6.0",
     "lxml>=6.1.3",
     "openai>=2,<3",
@@ -69,6 +70,12 @@ testpaths = ["tests"]
 pythonpath = ["scripts", "eval", "tests", "tests/api"]
 # importlib mode lets tests/unit and tests/api hold same-named files without __init__.py packages.
 addopts = "--import-mode=importlib"
+
+[tool.uv]
+# llama-index-retrievers-bm25 0.8.0 declares pystemmer<3, but only calls Stemmer.Stemmer("english")
+# and hands it to bm25s, as main's BM25 index did. Keeping 3.1.0 keeps stemming identical to main,
+# so the spike's eval measures LlamaIndex's BM25 and RRF alone (decided by Ivan).
+override-dependencies = ["pystemmer>=3.1.0"]
 
 # PyPI's Linux torch wheels bundle CUDA (gigabytes). This project embeds on CPU, so use the CPU index.
 [tool.uv.sources]

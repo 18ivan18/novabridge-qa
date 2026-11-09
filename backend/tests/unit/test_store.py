@@ -55,7 +55,7 @@ def store(tmp_path: Path) -> ChunkStore:
 def search(
     store: ChunkStore, query: str, n: int, filters: SearchFilters | None = None
 ) -> list[tuple[Chunk, Document, float]]:
-    """Dense search the way HybridRetriever runs it."""
+    """Dense search the way HybridSearch runs it."""
     index = VectorStoreIndex.from_vector_store(store.vector_store, embed_model=FakeEmbedding())
     retriever = index.as_retriever(similarity_top_k=n, filters=metadata_filters(filters))
     hits = []

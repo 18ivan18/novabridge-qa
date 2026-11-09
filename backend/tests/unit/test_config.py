@@ -23,6 +23,14 @@ def test_anthropic_provider_fails_fast(monkeypatch: pytest.MonkeyPatch) -> None:
         Settings(_env_file=None)
 
 
+def test_rrf_k_other_than_60_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    # LlamaIndex's QueryFusionRetriever hard-codes k = 60.
+    monkeypatch.setenv("RRF_K", "30")
+
+    with pytest.raises(ValidationError, match="RRF_K must be 60"):
+        Settings(_env_file=None)
+
+
 def test_unknown_provider_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LLM_PROVIDER", "acme")
 

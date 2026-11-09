@@ -8,7 +8,7 @@ from typing import get_args
 
 from novabridge_qa.config import Settings
 from novabridge_qa.container import build_embedder, build_retriever, build_store
-from novabridge_qa.retrieval.hybrid import SearchMode
+from novabridge_qa.retrieval.search import SearchMode
 
 
 def main() -> None:

@@ -9,7 +9,7 @@ from novabridge_qa.domain.models import ScoredPassage, SearchFilters
 from novabridge_qa.llm.base import ChatMessage, LLMClient
 from novabridge_qa.qa.citations import validate
 from novabridge_qa.qa.prompt import INSUFFICIENT_EVIDENCE, SYSTEM_PROMPT, build_user_message
-from novabridge_qa.retrieval.hybrid import Retriever
+from novabridge_qa.retrieval.search import Retriever
 
 logger = logging.getLogger(__name__)
 

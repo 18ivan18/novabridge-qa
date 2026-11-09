@@ -31,10 +31,10 @@ from novabridge_qa.domain.models import DocumentMeta, ScoredPassage
 from novabridge_qa.ingestion.corpus import load_corpus
 from novabridge_qa.ingestion.loaders import load_file
 from novabridge_qa.ingestion.pipeline import ingest_file
+from novabridge_qa.retrieval.bm25 import build_bm25
 from novabridge_qa.retrieval.embedder import CountingEmbedding
-from novabridge_qa.retrieval.hybrid import HybridRetriever, SearchMode
 from novabridge_qa.retrieval.reranker import Reranker
-from novabridge_qa.retrieval.sparse import SparseIndex
+from novabridge_qa.retrieval.search import HybridSearch, SearchMode
 from novabridge_qa.retrieval.store import ChunkStore
 
 EVAL_DIR = Path(__file__).parent
@@ -179,7 +179,7 @@ def build_retriever(
     reranker: Reranker | None,
     chunk_tokens: int,
     directory: Path,
-) -> tuple[HybridRetriever, ChunkStore]:
+) -> tuple[HybridSearch, ChunkStore]:
     dense = ChunkStore(directory, settings.embedding_model)
     for path, meta in load_corpus(settings.data_dir / "raw"):
         ingest_file(
@@ -190,12 +190,11 @@ def build_retriever(
             chunk_tokens=chunk_tokens,
             chunk_overlap=settings.chunk_overlap,
         )
-    retriever = HybridRetriever(
+    retriever = HybridSearch(
         embedder,
         dense,
-        SparseIndex.build(dense.all_passages()),
+        build_bm25(dense.all_nodes(), settings.retrieval_candidates),
         candidates=settings.retrieval_candidates,
-        rrf_k=settings.rrf_k,
         reranker=reranker,
         rerank_candidates=settings.rerank_candidates,
     )

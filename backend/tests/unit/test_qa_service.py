@@ -11,8 +11,8 @@ from novabridge_qa.domain.models import Chunk, Document, ScoredPassage, SearchFi
 from novabridge_qa.llm.base import Completion, LLMError
 from novabridge_qa.qa.prompt import SYSTEM_PROMPT
 from novabridge_qa.qa.service import Answer, QAService
-from novabridge_qa.retrieval.hybrid import HybridRetriever, SearchResult
-from novabridge_qa.retrieval.sparse import SparseIndex
+from novabridge_qa.retrieval.bm25 import build_bm25
+from novabridge_qa.retrieval.search import HybridSearch, SearchResult
 from novabridge_qa.retrieval.store import ChunkStore
 
 DOCUMENT = Document(
@@ -222,8 +222,8 @@ def test_end_to_end_with_a_real_index(tmp_path: Path) -> None:
     texts = ["ACME sells anvils to coyotes.", "The warehouse roof leaks."]
     chunks = [Chunk(f"doc:{i}", "doc", t, None, None, 0, 1) for i, t in enumerate(texts)]
     add_chunks(store, DOCUMENT, chunks)
-    sparse = SparseIndex.build(store.all_passages())
-    retriever = HybridRetriever(FakeEmbedding(), store, sparse, candidates=5, rrf_k=60)
+    bm25 = build_bm25(store.all_nodes(), 5)
+    retriever = HybridSearch(FakeEmbedding(), store, bm25, candidates=5)
     service = QAService(
         retriever, FakeLLM(["ACME sells anvils [1]."]), top_k=2, min_relevance=0.1, max_tokens=100
     )

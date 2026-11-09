@@ -61,6 +61,9 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def check_consistency(self) -> Self:
         """Fail at startup with a clear message, not on an analyst's first question."""
+        if self.rrf_k != 60:
+            # LlamaIndex's QueryFusionRetriever hard-codes k = 60.
+            raise ValueError("RRF_K must be 60: LlamaIndex's fusion retriever does not take k")
         if self.chunk_overlap >= self.chunk_tokens:
             raise ValueError("CHUNK_OVERLAP must be smaller than CHUNK_TOKENS")
         return self

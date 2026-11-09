@@ -5,12 +5,14 @@ from pathlib import Path
 import pytest
 from fake_embedding import FakeEmbedding
 from index_helpers import add_chunks
+from llama_index.core.retrievers import BaseRetriever
+from llama_index.core.schema import NodeWithScore, QueryBundle
 
 from novabridge_qa.config import Settings
-from novabridge_qa.container import load_sparse_index
+from novabridge_qa.container import load_or_rebuild_bm25
 from novabridge_qa.domain.models import Chunk, Document, SearchFilters
-from novabridge_qa.retrieval.hybrid import HybridRetriever
-from novabridge_qa.retrieval.sparse import SparseIndex
+from novabridge_qa.retrieval.bm25 import build_bm25
+from novabridge_qa.retrieval.search import HybridSearch
 from novabridge_qa.retrieval.store import ChunkStore
 
 
@@ -44,9 +46,9 @@ def dense(tmp_path: Path) -> ChunkStore:
     return index
 
 
-def make_retriever(dense: ChunkStore, candidates: int = 10) -> HybridRetriever:
-    sparse = SparseIndex.build(dense.all_passages())
-    return HybridRetriever(FakeEmbedding(), dense, sparse, candidates=candidates, rrf_k=60)
+def make_retriever(dense: ChunkStore, candidates: int = 10) -> HybridSearch:
+    bm25 = build_bm25(dense.all_nodes(), candidates)
+    return HybridSearch(FakeEmbedding(), dense, bm25, candidates=candidates)
 
 
 def test_hybrid_reports_both_ranks(dense: ChunkStore) -> None:
@@ -78,7 +80,12 @@ def test_chunk_found_only_by_bm25_is_fetched_in_hybrid_mode(
     dense: ChunkStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     retriever = make_retriever(dense)
-    monkeypatch.setattr(retriever, "_dense_search", lambda *_: [])
+
+    class NoDenseHits(BaseRetriever):
+        def _retrieve(self, query_bundle: QueryBundle) -> list[NodeWithScore]:
+            return []
+
+    monkeypatch.setattr(retriever._index, "as_retriever", lambda **_: NoDenseHits())
 
     passage = retriever.search("engineers", 4)[0]
 
@@ -114,19 +121,33 @@ def test_empty_filters_restrict_nothing(dense: ChunkStore) -> None:
     assert len(make_retriever(dense).search("anvils", 4, SearchFilters())) == 4
 
 
-def test_filter_matching_nothing_returns_nothing(dense: ChunkStore) -> None:
-    assert make_retriever(dense).search("anvils", 4, SearchFilters(tickers=("NOPE",))) == []
+@pytest.mark.parametrize("mode", ["reranked", "hybrid", "dense", "sparse"])
+def test_filter_matching_nothing_returns_nothing(dense: ChunkStore, mode: str) -> None:
+    # BM25Retriever raises ValueError when its filter leaves no node.
+    filters = SearchFilters(tickers=("NOPE",))
+
+    assert make_retriever(dense).search("anvils", 4, filters, mode) == []  # type: ignore[arg-type]
 
 
-def test_sparse_index_is_rebuilt_when_it_falls_behind_chroma(
-    dense: ChunkStore, tmp_path: Path
-) -> None:
+def test_an_empty_store_returns_nothing(tmp_path: Path) -> None:
+    empty = ChunkStore(tmp_path / "empty", "fake-model")
+
+    result = make_retriever(empty).retrieve("anvils", 4)
+
+    assert (result.passages, result.best_similarity) == ([], None)
+
+
+def test_bm25_is_rebuilt_when_it_falls_behind_chroma(dense: ChunkStore, tmp_path: Path) -> None:
     settings = Settings(_env_file=None, data_dir=tmp_path)
-    assert len(load_sparse_index(settings, dense)) == 4
+    first = load_or_rebuild_bm25(settings, dense)
+    assert first is not None and len(first) == 4
+    reloaded = load_or_rebuild_bm25(settings, dense)
+    assert reloaded is not None and len(reloaded) == 4
 
     add(dense, make_document("c", "GAMMA"), "GAMMA buys anvils")
 
-    assert len(load_sparse_index(settings, dense)) == 5
+    rebuilt = load_or_rebuild_bm25(settings, dense)
+    assert rebuilt is not None and len(rebuilt) == 5
 
 
 class ScriptedReranker:
@@ -141,14 +162,12 @@ class ScriptedReranker:
         return [float(sum(word in p for word in self.preferred)) for p in passages]
 
 
-def reranking(dense: ChunkStore, reranker: ScriptedReranker, candidates: int) -> HybridRetriever:
-    sparse = SparseIndex.build(dense.all_passages())
-    return HybridRetriever(
+def reranking(dense: ChunkStore, reranker: ScriptedReranker, candidates: int) -> HybridSearch:
+    return HybridSearch(
         FakeEmbedding(),
         dense,
-        sparse,
+        build_bm25(dense.all_nodes(), 10),
         candidates=10,
-        rrf_k=60,
         reranker=reranker,
         rerank_candidates=candidates,
     )

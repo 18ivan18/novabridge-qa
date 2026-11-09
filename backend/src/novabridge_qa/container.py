@@ -6,14 +6,14 @@ from novabridge_qa.config import Settings
 from novabridge_qa.ingestion.uploads import UploadService
 from novabridge_qa.llm.factory import build_llm
 from novabridge_qa.qa.service import QAService
+from novabridge_qa.retrieval.bm25 import NonZeroBM25Retriever, build_bm25, load_bm25, save_bm25
 from novabridge_qa.retrieval.embedder import (
     CountingEmbedding,
     FastEmbedEmbedding,
     SentenceTransformerEmbedding,
 )
-from novabridge_qa.retrieval.hybrid import HybridRetriever
 from novabridge_qa.retrieval.reranker import FastEmbedReranker, Reranker
-from novabridge_qa.retrieval.sparse import SparseIndex
+from novabridge_qa.retrieval.search import HybridSearch
 from novabridge_qa.retrieval.store import ChunkStore
 
 
@@ -43,20 +43,18 @@ def build_store(settings: Settings) -> ChunkStore:
     return ChunkStore(settings.data_dir / "index" / "chroma", settings.embedding_model)
 
 
-def rebuild_sparse_index(settings: Settings, store: ChunkStore) -> SparseIndex:
-    sparse = SparseIndex.build(store.all_passages())
-    sparse.save(settings.data_dir / "index" / "bm25")
-    return sparse
+def rebuild_bm25(settings: Settings, store: ChunkStore) -> NonZeroBM25Retriever | None:
+    bm25 = build_bm25(store.all_nodes(), settings.retrieval_candidates)
+    save_bm25(bm25, settings.data_dir / "index" / "bm25")
+    return bm25
 
 
-def load_sparse_index(settings: Settings, store: ChunkStore) -> SparseIndex:
+def load_or_rebuild_bm25(settings: Settings, store: ChunkStore) -> NonZeroBM25Retriever | None:
     """Load BM25, rebuilding it if it is missing or out of step with Chroma."""
-    path = settings.data_dir / "index" / "bm25"
-    if path.exists():
-        sparse = SparseIndex.load(path)
-        if len(sparse) == store.count_chunks():
-            return sparse
-    return rebuild_sparse_index(settings, store)
+    bm25 = load_bm25(settings.data_dir / "index" / "bm25")
+    if bm25 is not None and len(bm25) == store.count_chunks():
+        return bm25
+    return rebuild_bm25(settings, store)
 
 
 def build_reranker(settings: Settings) -> Reranker | None:
@@ -65,13 +63,12 @@ def build_reranker(settings: Settings) -> Reranker | None:
 
 def build_retriever(
     settings: Settings, embed_model: CountingEmbedding, store: ChunkStore
-) -> HybridRetriever:
-    return HybridRetriever(
+) -> HybridSearch:
+    return HybridSearch(
         embed_model,
         store,
-        load_sparse_index(settings, store),
+        load_or_rebuild_bm25(settings, store),
         candidates=settings.retrieval_candidates,
-        rrf_k=settings.rrf_k,
         reranker=build_reranker(settings),
         rerank_candidates=settings.rerank_candidates,
     )
@@ -84,7 +81,7 @@ def build_services(settings: Settings, store: ChunkStore) -> Services:
     retriever = build_retriever(settings, embed_model, store)
 
     def refresh_sparse() -> None:
-        retriever.replace_sparse(rebuild_sparse_index(settings, store))
+        retriever.replace_bm25(rebuild_bm25(settings, store))
 
     return Services(
         qa=QAService(

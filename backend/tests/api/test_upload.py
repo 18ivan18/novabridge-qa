@@ -11,13 +11,12 @@ from httpx import Response
 from llama_index.core.base.embeddings.base import Embedding
 
 from novabridge_qa.api.deps import get_upload_service
-from novabridge_qa.container import Container, rebuild_sparse_index
+from novabridge_qa.container import Container, rebuild_bm25
 from novabridge_qa.domain.models import SearchFilters
 from novabridge_qa.ingestion import pipeline
 from novabridge_qa.ingestion.uploads import UploadService
 from novabridge_qa.retrieval.embedder import CountingEmbedding
-from novabridge_qa.retrieval.hybrid import HybridRetriever
-from novabridge_qa.retrieval.sparse import SparseIndex
+from novabridge_qa.retrieval.search import HybridSearch
 
 MAX_BYTES = 5000
 TEXT = (
@@ -32,13 +31,11 @@ class Harness:
         self.dense = container.store
         self.uploads_dir = container.settings.data_dir / "uploads"
         self.refreshes = 0
-        self.retriever = HybridRetriever(
-            embedder, self.dense, SparseIndex.build([]), candidates=20, rrf_k=60
-        )
+        self.retriever = HybridSearch(embedder, self.dense, None, candidates=20)
 
         def refresh() -> None:
             self.refreshes += 1
-            self.retriever.replace_sparse(rebuild_sparse_index(container.settings, self.dense))
+            self.retriever.replace_bm25(rebuild_bm25(container.settings, self.dense))
 
         self.service = UploadService(
             embedder,
