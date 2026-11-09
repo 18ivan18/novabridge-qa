@@ -1,6 +1,17 @@
+import { z } from "zod";
+
+import {
+  AskResponseSchema,
+  ClientConfigSchema,
+  HealthSchema,
+  JobSchema,
+  LibraryDocumentSchema,
+  UploadResponseSchema,
+} from "./schemas";
 import type {
   AskRequest,
   AskResponse,
+  ClientConfig,
   Health,
   Job,
   LibraryDocument,
@@ -37,7 +48,23 @@ async function errorMessage(response: Response): Promise<string> {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+/**
+ * Check a response body against its schema. A mismatch is logged rather than thrown: the body is
+ * still used as it is, so a harmless change on the server, such as a new field, warns a developer
+ * in the console without breaking the page.
+ */
+function checked<S extends z.ZodType>(path: string, schema: S, body: unknown): z.infer<S> {
+  const result = schema.safeParse(body);
+  if (result.success) return result.data;
+  console.warn(`Unexpected response from /api${path}`, result.error.issues);
+  return body as z.infer<S>;
+}
+
+async function request<S extends z.ZodType>(
+  path: string,
+  schema: S,
+  init?: RequestInit,
+): Promise<z.infer<S>> {
   let response: Response;
   try {
     response = await fetch(`/api${path}`, init);
@@ -47,23 +74,29 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     throw new ApiError(response.status, await errorMessage(response));
   }
+  let body: unknown;
   try {
-    return (await response.json()) as T;
+    body = await response.json();
   } catch {
     throw new ApiError(response.status, "The server sent a response that could not be read.");
   }
+  return checked(path, schema, body);
 }
 
 export function getHealth(): Promise<Health> {
-  return request("/health");
+  return request("/health", HealthSchema);
+}
+
+export function getConfig(): Promise<ClientConfig> {
+  return request("/config", ClientConfigSchema);
 }
 
 export function getDocuments(): Promise<LibraryDocument[]> {
-  return request("/documents");
+  return request("/documents", z.array(LibraryDocumentSchema));
 }
 
 export function askQuestion(body: AskRequest): Promise<AskResponse> {
-  return request("/ask", {
+  return request("/ask", AskResponseSchema, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -77,9 +110,9 @@ export function uploadDocument(file: File, tags: UploadTags): Promise<UploadResp
   form.append("doc_type", tags.doc_type);
   // The API parses this field as a date, so an empty string would be rejected.
   if (tags.period_end) form.append("period_end", tags.period_end);
-  return request("/documents", { method: "POST", body: form });
+  return request("/documents", UploadResponseSchema, { method: "POST", body: form });
 }
 
 export function getJob(jobId: string): Promise<Job> {
-  return request(`/jobs/${encodeURIComponent(jobId)}`);
+  return request(`/jobs/${encodeURIComponent(jobId)}`, JobSchema);
 }

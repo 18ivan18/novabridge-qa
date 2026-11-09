@@ -41,7 +41,8 @@ def list_documents(container: ContainerDep) -> list[DocumentResponse]:
     status_code=status.HTTP_202_ACCEPTED,
     summary="Upload a document",
     description=(
-        "Accepts one TXT or Markdown file. Indexing runs in the background: poll the returned job "
+        "Accepts one file of a type that `GET /api/config` lists, up to its size limit. "
+        "Indexing runs in the background: poll the returned job "
         "for its progress. A file already in the library gets a job that is already `indexed`, "
         "and its original tags are kept."
     ),

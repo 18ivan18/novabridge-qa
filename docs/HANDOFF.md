@@ -92,6 +92,7 @@ The brief explicitly says: *"This task tests your judgment and ability to verify
 - `react`, `react-dom`, `vite`, `typescript`, `@vitejs/plugin-react`
 - UI: `shadcn/ui` (with what it requires: `tailwindcss`, Radix primitives, `class-variance-authority`, `cn`, `lucide-react`)
 - Server state: `@tanstack/react-query`
+- Response checking: `zod` (schemas for every API response; a mismatch logs a console warning and the data is still used), approved by Ivan
 - Dev: `eslint` (+ TS plugin), `vitest`, `@testing-library/react`, `jsdom`
 - No axios (use `fetch` with a small typed client, called from TanStack Query). No other state library.
 
@@ -180,6 +181,7 @@ Pure, heavily unit-tested function:
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/health` | `{status, llm_provider, embedder, documents, chunks}` |
+| GET | `/api/config` | `{upload_types, max_upload_mb}`: the upload limits, so the UI never hard-codes them |
 | POST | `/api/ask` | Ask a question |
 | GET | `/api/documents` | List documents in the library |
 | POST | `/api/documents` | Upload one file (multipart: `file`, `company`, `doc_type`, `period_end?`) → `202 {job_id, doc_id}` |
@@ -280,13 +282,14 @@ novabridge-qa/
 │   │   │   ├── schemas.py        # Pydantic request/response models (API layer only)
 │   │   │   ├── deps.py           # FastAPI dependencies → container
 │   │   │   ├── routes_ask.py
+│   │   │   ├── routes_config.py  # client limits (upload types and size)
 │   │   │   ├── routes_documents.py
 │   │   │   └── routes_health.py
 │   │   ├── ingestion/
 │   │   │   ├── loaders/          # one module per format (text, html; pdf next) + suffix registry
 │   │   │   ├── sections.py       # 10-K "Item X" section detection
 │   │   │   ├── chunking.py
-│   │   │   ├── pipeline.py       # ingest_file(path, meta) -> Document
+│   │   │   ├── pipeline.py       # prepare_document (chunk + embed), shared by ingest_file and uploads
 │   │   │   └── jobs.py           # in-memory job registry
 │   │   ├── retrieval/
 │   │   │   ├── embedder.py
@@ -328,7 +331,7 @@ novabridge-qa/
     └── src/
         ├── main.tsx
         ├── App.tsx
-        ├── api/{client.ts,types.ts}   # types mirror backend schemas
+        ├── api/{client.ts,schemas.ts,types.ts}   # zod schemas mirror backend schemas; response types are inferred from them
         ├── styles/{tokens.css,global.css}   # tokens feed the shadcn/Tailwind theme variables
         └── components/
             ├── ui/                    # generated shadcn/ui components
