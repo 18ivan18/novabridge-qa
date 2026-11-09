@@ -358,7 +358,33 @@ Retrieval (`eval/results.md`), at the default 400 tokens:
 - The relevance gate table is identical, so all 8 unanswerable questions still fall where they did: the 3 off-topic ones below `MIN_RELEVANCE`.
 - Median search time at 400 tokens: re-ranked 531 ms against 525, hybrid 8 ms against 8. One run each, so these are equal.
 
-Answer evaluation (`eval/run_answer_eval.py`): not yet run on this branch. It needs the real LLM, and Ivan runs it.
+Answer evaluation (`eval/run_answer_eval.py`), `openai/gpt-oss-120b` on Groq, top 6 re-ranked:
+`main`'s run is `2026-11-08-openai-gpt-oss-120b`. The spike's is
+`2026-11-09-spike-llamaindex-openai-gpt-oss-120b` (raw answers in `eval/answer_runs/`), on a fresh
+index of 1,023 chunks. `eval/answer_results.md` still shows `main`'s run. To rescore the spike's,
+run `run_answer_eval.py score --run <name>`.
+
+| Questions | Answered `main` | Answered spike | Correct `main` | Correct spike | Evidence cited `main` | Evidence cited spike |
+|---|---|---|---|---|---|---|
+| HTML (24) | 23/24 | 24/24 | 23/24 | 23/24 | 22/24 | 22/24 |
+| TXT (21) | 19/21 | 19/21 | 17/21 | 16/21 | 16/21 | 15/21 |
+| Off-topic (3), refused | 3/3 by the gate | 3/3 by the gate | | | | |
+| In-domain unanswerable (5), refused | 5/5 by the model | 5/5 by the model | | | | |
+
+- Every count is within one question of `main`, and every unanswerable question is refused.
+- The prompts were identical. All 53 questions used the same number of input tokens (137,219 in
+  total). 51 got the same passages in the same order. The other two, u02 and u03, are
+  unanswerable questions that were refused on both branches.
+- Four questions changed outcome, and each had the same passages as on `main`. The model answers
+  differently from run to run, so these differences are not caused by the spike:
+  - **m25:** `main` refused; the spike answered with a computed net income that the scorer does
+    not accept.
+  - **m02:** the spike stated $4,379 million but not "$4.38 billion", which the question's fact
+    pattern requires.
+  - **m04:** the spike cited only the 2026 filing.
+  - **a04:** the spike also cited the 2026 filing.
+- Median latency per question with an LLM call: 1,502 ms against 1,483. Output tokens: 9,810
+  against 9,549.
 
 ### What was lost
 

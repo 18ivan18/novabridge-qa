@@ -357,7 +357,7 @@ Smaller things found along the way, to fit in where convenient:
 - [ ] Run the Anthropic adapter against the real API once keys are available. The README says it
       has not been run. (On `spike/llamaindex` there is no Anthropic provider: LlamaIndex's
       integration does not work with the current SDK. See `docs/LLAMAINDEX_SPIKE.md`, correction 5.)
-- [ ] `spike/llamaindex`: run the answer eval (`run_answer_eval.py ask`, then `score`) and add the
+- [x] `spike/llamaindex`: run the answer eval (`run_answer_eval.py ask`, then `score`) and add the
       numbers to "Main vs spike" in `docs/LLAMAINDEX_SPIKE.md`.
 - [ ] Run the Ollama profile with a real model. Only its compose configuration was checked.
 - [ ] Uploads have no ticker, so they only appear under "My uploads". Add an optional ticker field

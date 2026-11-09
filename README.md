@@ -149,9 +149,9 @@ than a clear win: at 200 tokens dense scored higher. Details are in
 
 `backend/eval/run_answer_eval.py` asks every question through the real pipeline and checks each
 answer against facts written for it ([answer_results.md](backend/eval/answer_results.md), raw
-answers in `backend/eval/answer_runs/`). These numbers are from `main`; the answer eval has not
-been run on this branch yet. Two runs with `openai/gpt-oss-120b` on Groq, all six
-filings indexed, before and with the re-ranker:
+answers in `backend/eval/answer_runs/`). These numbers are from `main`. The run on this branch is
+within one question of them on every row (`docs/LLAMAINDEX_SPIKE.md`, "Main vs spike"). Two runs
+with `openai/gpt-oss-120b` on Groq, all six filings indexed, before and with the re-ranker:
 
 | Questions | Answered | Correct | Evidence cited | Answered from the other filing |
 |---|---|---|---|---|
