@@ -8,6 +8,7 @@ Full, unedited exports of every AI-assistant conversation used on this project, 
 | [2026-11-07-claude-code-M0-M11.jsonl](2026-11-07-claude-code-M0-M11.jsonl) | Claude Code | The implementation, M0 to M11 and the improvements list. The complete raw session transcript, including everything before the context was compacted |
 | [2026-11-08-005011-read-docshandoffmd-and-do-m0.txt](2026-11-08-005011-read-docshandoffmd-and-do-m0.txt) | Claude Code | The same session from `/export`, easier to read. It starts after the compaction, so it covers M7 onwards only |
 | [2026-11-09-004316-docsimprovementsmd-lets-start-implementing-1.txt](2026-11-09-004316-docsimprovementsmd-lets-start-implementing-1.txt) | Claude Code | The improvements session from `/export`: task 1 (HTML loader), task 2 (answer evaluation), recall before fusion, task 4 (re-ranker) and task 11 written up. It starts at the session's first message |
+| [2026-11-09-161126-pastedcontent-idd36f.txt](2026-11-09-161126-pastedcontent-idd36f.txt) | Claude Code | The LlamaIndex spike from `/export`: the `spike/llamaindex` branch, its comparison with `main`, and the decision to close its PR and keep the branch |
 
 The `.jsonl` is Claude Code's own transcript format: one JSON object per line, holding messages,
 tool calls and their results.
