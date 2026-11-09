@@ -48,7 +48,7 @@ a change to `.env`, followed by a restart:
 | Groq (default) | `LLM_API_KEY`, `LLM_MODEL` | Tested end to end |
 | OpenAI | Also `LLM_BASE_URL=https://api.openai.com/v1` | Not run. Same adapter as Groq |
 | Ollama | `LLM_BASE_URL=http://ollama:11434/v1`, `LLM_MODEL`, any text in `LLM_API_KEY`, then `docker compose --profile local-llm up --build` and `docker compose exec ollama ollama pull <model>` | Compose config validated only. Never run with a model |
-| Anthropic | `LLM_PROVIDER=anthropic`, `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | Unit tests only. Not yet run against the real API |
+| Anthropic | Not available on this branch | LlamaIndex's Anthropic integration does not work with the current `anthropic` SDK ([details](docs/LLAMAINDEX_SPIKE.md#corrections-found-before-stage-1), correction 5). `main` has a hand-written adapter |
 
 ## Architecture
 
@@ -75,6 +75,10 @@ flowchart TD
 
 - `backend/src/novabridge_qa/`: `ingestion/`, `retrieval/`, `llm/`, `qa/`, `api/`, with `domain/` for
   shared types. `container.py` does the wiring.
+- LlamaIndex components on this branch: `TenKNodeParser` (sections, then `SentenceSplitter`) and
+  `IngestionPipeline` for ingestion; `ChromaVectorStore`, `BM25Retriever` and
+  `QueryFusionRetriever` for search; `GroundedQueryEngine` (a `CustomQueryEngine`) for answers;
+  `OpenAILike` for the LLM.
 - `frontend/src/`: React, with TanStack Query for server state.
 - Compose runs `ingest` once, then `api` (uvicorn), then `web` (nginx serving the build and
   proxying `/api`).
@@ -83,11 +87,11 @@ flowchart TD
 
 | Decision | Why | Trade-off |
 |---|---|---|
-| **Plain Python, no LlamaIndex or LangChain** | Chunking, fusion, the prompt and the citation check are the core of this task, so they should be visible and testable. LlamaIndex would duplicate the LLM adapters and hide the citation logic in its templates. | More code to own |
+| **LlamaIndex for the plumbing, our logic as its components** (this branch; `main` is plain Python) | Chroma, BM25, RRF, chunk packing, ingestion and the LLM call are library code. Section detection (`TenKNodeParser`), the relevance gate, the refusal marker, the prompt and the citation check (`GroundedQueryEngine`) stay ours and visible. Retrieval scores are identical to `main` ([Main vs spike](docs/LLAMAINDEX_SPIKE.md#main-vs-spike)). | 28 more locked packages, `llama-index-core` pinned exactly, and about 200 more lines of our own code, mostly correcting LlamaIndex defaults that do not suit filings |
 | **LLM behind an adapter**, chosen in `.env` | Runs free on Groq or Ollama, and tests use a fake | A small interface to maintain |
 | **Embedder separate from the LLM** | Anthropic has no embeddings API, so the two cannot share a provider | Two settings instead of one |
 | **`bge-small-en-v1.5` through fastembed** | Small ONNX model that is fast on CPU, local and free | 512-token limit, so chunks stay at 400 |
-| **Hybrid search with hand-written RRF** | Filings mix exact terms, where BM25 wins, with paraphrased questions, where dense wins. RRF needs no score calibration. | Two indexes to keep in step |
+| **Hybrid search with LlamaIndex's RRF** (`QueryFusionRetriever`, k fixed at 60) | Filings mix exact terms, where BM25 wins, with paraphrased questions, where dense wins. RRF needs no score calibration. | Two indexes to keep in step |
 | **Cross-encoder re-ranker** (`jina-reranker-v1-tiny-en`) on the top 20 after RRF | RRF ranks a passage found by both retrievers above any passage found by one, which dropped 6 of the 9 misses. Reading the question and passage together raised R@6 at 400 tokens from 0.83 to 0.92 (HTML) and 0.76 to 0.81 (TXT). Chosen from six fastembed models on recall, speed and license. | About 0.5 s more per question on CPU, and 129 MB more model in the image. `RERANKER_MODEL=` turns it off |
 | **Chroma as the source of truth** | Embedded with no operations work. BM25 is derived from it and can always be rebuilt. | One process at a time, which is why ingest runs before the API |
 | **Citations checked on the server** | The model's citations are parsed, invalid numbers dropped, the rest renumbered. No valid citation counts as no answer. | A correct answer with no parsable citation is discarded |
@@ -145,7 +149,8 @@ than a clear win: at 200 tokens dense scored higher. Details are in
 
 `backend/eval/run_answer_eval.py` asks every question through the real pipeline and checks each
 answer against facts written for it ([answer_results.md](backend/eval/answer_results.md), raw
-answers in `backend/eval/answer_runs/`). Two runs with `openai/gpt-oss-120b` on Groq, all six
+answers in `backend/eval/answer_runs/`). These numbers are from `main`; the answer eval has not
+been run on this branch yet. Two runs with `openai/gpt-oss-120b` on Groq, all six
 filings indexed, before and with the re-ranker:
 
 | Questions | Answered | Correct | Evidence cited | Answered from the other filing |
@@ -218,8 +223,9 @@ cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy
 cd frontend && npm run lint && npm run typecheck && npm test
 ```
 
-- **Backend (318 tests):** loaders (TXT and HTML), chunking, sections, RRF, re-ranking, citations, prompts, settings, the QA service with
-  fakes, and the API through `TestClient`. No network or API keys needed.
+- **Backend (347 tests):** loaders (TXT and HTML), chunking, sections, BM25 and fusion, re-ranking,
+  the ingestion pipeline, citations, prompts, settings, the query engine with fakes, and the API
+  through `TestClient`. No network or API keys needed.
 - **Frontend (31 tests):** citation rendering, retrieval details, API client errors and upload queue state. These are
   deliberately few. The full flow was checked by hand-written scripts in a real browser rather than
   automated tests in the repository.

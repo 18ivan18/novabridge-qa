@@ -16,7 +16,11 @@ Frontend (from `frontend/`, once it exists):
 ## Rules
 
 - One milestone at a time; run the checks and wait for Ivan's approval before starting the next.
-- No LangChain or LlamaIndex.
+- On this branch (`spike/llamaindex`) LlamaIndex does the plumbing: Chroma, BM25, RRF, chunk
+  packing, ingestion and the LLM call. Do not replace it with hand-written code. Section detection,
+  the relevance gate, the refusal marker, the prompt and the citation check stay ours, as
+  LlamaIndex components. Read `docs/LLAMAINDEX_SPIKE.md` (its corrections list the traps) before
+  changing retrieval or ingestion. No LangChain.
 - Ask before adding a dependency not listed in section 4 of the handoff.
 - No secrets in the repo. No invented facts in fixtures or the README.
 - If the handoff is wrong or blocks you, stop and say so.

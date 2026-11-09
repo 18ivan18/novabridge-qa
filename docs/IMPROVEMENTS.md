@@ -4,7 +4,8 @@ Work through these in order. Each task is written so an agent can start it cold.
 
 ## Rules for every task
 
-- Read `CLAUDE.md` and `docs/HANDOFF.md` first. Their rules apply: no LangChain or LlamaIndex, no
+- Read `CLAUDE.md` and `docs/HANDOFF.md` first. Their rules apply: no LangChain (on the
+  `spike/llamaindex` branch LlamaIndex is the framework: see `docs/LLAMAINDEX_SPIKE.md`), no
   secrets in the repo, no invented facts in fixtures or docs, and ask Ivan before adding a dependency
   that section 4 of the handoff does not list.
 - One task per branch, with small conventional commits. Run both check commands from `CLAUDE.md`
@@ -354,7 +355,10 @@ Smaller things found along the way, to fit in where convenient:
       the raw transcript (`.jsonl`) is needed too. Check both for secrets before committing.
 - [ ] Ivan approves `eval/questions.jsonl` and spot-checks chunks.
 - [ ] Run the Anthropic adapter against the real API once keys are available. The README says it
-      has not been run.
+      has not been run. (On `spike/llamaindex` there is no Anthropic provider: LlamaIndex's
+      integration does not work with the current SDK. See `docs/LLAMAINDEX_SPIKE.md`, correction 5.)
+- [ ] `spike/llamaindex`: run the answer eval (`run_answer_eval.py ask`, then `score`) and add the
+      numbers to "Main vs spike" in `docs/LLAMAINDEX_SPIKE.md`.
 - [ ] Run the Ollama profile with a real model. Only its compose configuration was checked.
 - [ ] Uploads have no ticker, so they only appear under "My uploads". Add an optional ticker field
       to the upload, or match the company name to a known ticker.

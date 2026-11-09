@@ -301,3 +301,68 @@ Found while building stage 6 (Nov 9, 2026):
 28. **`llama_index.core.instrumentation` re-exports without `__all__`**, so mypy strict flags `get_dispatcher` and `instrument_tags`. A mypy override sets `implicit_reexport` for that package rather than importing `llama_index_instrumentation`, a transitive dependency, directly.
 
 Stage 6 check: `scripts/ingest.py` on the corpus gives 1,023 chunks, as in stage 4, and a second run skips all six files. The retrieval eval was not rerun, because chunk content did not change.
+
+## Main vs spike
+
+Measured on Nov 9, 2026: `main` at `83146fa`, the spike at the end of stage 6. Line counts are `wc -l` of the Python files on each branch, docstrings and comments included.
+
+### Code we own
+
+| Area | `main` | Spike | What changed |
+|---|---|---|---|
+| `llm/` | 289 | 173 | Two hand-written adapters and the fake became one wrapper around LlamaIndex's `LLM` (`OpenAILike`). The fake moved to `tests/`. Anthropic is gone. |
+| `retrieval/` | 583 | 702 | `dense.py`, `sparse.py`, `fusion.py` and `hybrid.py` became `store.py`, `bm25.py`, `fusion_retriever.py` and `search.py`: LlamaIndex components plus subclasses for traps 7–16 and 24. |
+| `ingestion/` (without loaders) | 516 | 695 | `chunking.py` and `pipeline.py` became `tenk_parser.py` (on `SentenceSplitter`) and `indexing.py` (on `IngestionPipeline`, with the docstore and the progress handler). |
+| `qa/` | 222 | 240 | `QAService` became `GroundedQueryEngine`. `prompt.py` and `citations.py` are unchanged. |
+| loaders, `api/`, `domain/`, `config.py`, `container.py`, `main.py` | 1,082 | 1,082 | Wiring only. |
+| **All of `backend/src`** | **2,692** | **2,892** | **+200 (+7%)** |
+| `backend/tests` | 3,145 | 3,825 | Every deleted test's behaviour moved to a test of the replacing component, plus tests for the traps. 347 tests on the spike. |
+
+`git diff --stat main...spike/llamaindex -- backend/src`: 26 files changed, 1,144 insertions, 944 deletions.
+
+The design predicted that about 700 lines would go and about 200 would arrive. The code did shrink where LlamaIndex replaced code outright: the LLM adapters, the RRF function and the BM25 wrapper. It grew where a LlamaIndex default had to be corrected:
+- the sentence tokenizer and the comma fallback;
+- the score conversion and the rank capture around fusion;
+- zero-score BM25 hits;
+- node-0-last writes;
+- the docstore hash;
+- the cache;
+- progress routing.
+
+Each correction is small, but each one needs a comment saying why it exists, and a test.
+
+### Dependencies
+
+| | `main` | Spike |
+|---|---|---|
+| Direct | `openai>=3.46.0`, `anthropic` | `openai>=2,<3`, plus `llama-index-core==0.14.25`, `llama-index-llms-openai-like==0.8.1`, `llama-index-vector-stores-chroma==0.6.0` and `llama-index-retrievers-bm25==0.8.0`, all pinned exactly because the spike subclasses private methods |
+| Overrides | none | `pystemmer>=3.1.0`, against the BM25 integration's `<3` |
+| Locked packages | | 28 added, among them `nltk`, `tiktoken`, `sqlalchemy`, `aiosqlite`, `greenlet`, `llama-index-workflows` and `banks`. 2 removed (`anthropic`, `docstring-parser`). The spike's code calls none of the added ones directly. |
+
+The Docker image size was not measured on the spike.
+
+### Evaluation
+
+Retrieval (`eval/results.md`), at the default 400 tokens:
+
+| Mode | Questions | R@6 `main` | R@6 spike | MRR `main` | MRR spike |
+|---|---|---|---|---|---|
+| Re-ranked | HTML (24) | 0.92 | 0.92 | 0.715 | 0.715 |
+| Re-ranked | TXT (21) | 0.81 | 0.81 | 0.676 | 0.676 |
+| Hybrid | HTML (24) | 0.83 | 0.83 | 0.684 | 0.684 |
+| Hybrid | TXT (21) | 0.76 | 0.76 | 0.496 | 0.496 |
+
+- Every row at 400 tokens is identical, dense and BM25 included, and so is candidate recall.
+- At 200 and 300 tokens, R@6 for re-ranked and hybrid is identical too. MRR moves by less than one question (stage 4 above).
+- Chunks: 1,023 against 1,028.
+- The relevance gate table is identical, so all 8 unanswerable questions still fall where they did: the 3 off-topic ones below `MIN_RELEVANCE`.
+- Median search time at 400 tokens: re-ranked 531 ms against 525, hybrid 8 ms against 8. One run each, so these are equal.
+
+Answer evaluation (`eval/run_answer_eval.py`): not yet run on this branch. It needs the real LLM, and Ivan runs it.
+
+### What was lost
+
+- **Anthropic as a provider**, because no released LlamaIndex Anthropic integration works with the current SDK (correction 5).
+- **`RRF_K` as a setting**: LlamaIndex fixes k at 60 (correction 15).
+- **Parallel embedding of uploads**: the write lock now covers embedding (correction 27).
+- **Freedom to upgrade freely**: `llama-index-core` is pinned exactly, because three subclasses call its private methods.

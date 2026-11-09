@@ -41,8 +41,10 @@ The brief explicitly says: *"This task tests your judgment and ability to verify
    commit messages.
 2. **Before every commit:** `uv run ruff check . && uv run ruff format --check . && uv run mypy src && uv run pytest`
    in `backend/`, and `npm run lint && npm run typecheck && npm test` in `frontend/` once it exists.
-3. **No LangChain, no LlamaIndex.** The core is plain Python behind small interfaces (decision D1). Don't
-   add a framework to "save time".
+3. **LlamaIndex for the plumbing, no LangChain** (decision D1, on `spike/llamaindex`). Use LlamaIndex
+   components for storage, BM25, fusion, chunk packing, ingestion and the LLM call. Our domain logic
+   stays ours, written as LlamaIndex components. Read `docs/LLAMAINDEX_SPIKE.md` before changing
+   retrieval or ingestion: its corrections list the defaults that had to be overridden.
 4. **Ask before adding any dependency** not listed in section 4. Give a one-line reason.
 5. **Prefer clarity over cleverness.** Small functions, explicit types, no metaprogramming, no global
    mutable state except the app container built in `main.py`.
@@ -60,11 +62,11 @@ The brief explicitly says: *"This task tests your judgment and ability to verify
 
 | # | Decision | Why |
 |---|---|---|
-| D1 | Plain Python core, **no LlamaIndex/LangChain** | Every step (chunking, fusion, prompt, citation check) is visible, testable and explainable. LlamaIndex would duplicate our own LLM adapter layer and hide the citation logic in its templates. Trade-off: more code; the brief only *suggests* frameworks. |
-| D2 | **LLM behind an adapter interface**, provider chosen by env var | `LLM_PROVIDER=openai_compatible` (Groq, Ollama, OpenAI by changing `base_url`) or `anthropic`. Shows clean ports-and-adapters design, keeps the system runnable for free (Groq/Ollama), and lets tests use a `FakeLLM`. |
+| D1 | **LlamaIndex for the plumbing, our domain logic as its components** (replaced the plain-Python D1 on `spike/llamaindex`; `main` keeps it). No LangChain. | Chroma (`ChromaVectorStore`), BM25 (`BM25Retriever`), RRF (`QueryFusionRetriever`), chunk packing (`SentenceSplitter`), ingestion (`IngestionPipeline`) and the LLM call (`OpenAILike`) are library code. Section detection (`TenKNodeParser`), the relevance gate, the refusal marker, the prompt and the citation check (`GroundedQueryEngine`) stay ours. Retrieval scores match the plain-Python version. Trade-offs: `llama-index-core` pinned exactly (we subclass private methods), 28 more locked packages, no Anthropic provider, and more of our own code than before, mostly correcting defaults. Details and numbers: `docs/LLAMAINDEX_SPIKE.md`. |
+| D2 | **LLM behind an adapter interface**, provider chosen by env var | `LLM_PROVIDER=openai_compatible` (Groq, Ollama, OpenAI by changing `base_url`). On `spike/llamaindex` the adapter is LlamaIndex's `OpenAILike` behind `LlamaIndexClient`, and `anthropic` is not available (no working LlamaIndex integration). Shows clean ports-and-adapters design, keeps the system runnable for free (Groq/Ollama), and lets tests use a `FakeLLM`. |
 | D3 | **Embedder is a separate interface** from the LLM | Anthropic has no embeddings API, so the embedding provider can't follow the LLM provider. |
 | D4 | Embeddings: **`BAAI/bge-small-en-v1.5` via `fastembed`** to start; selected by `EMBEDDING_PROVIDER` | Small ONNX model, fast on CPU, runs locally and free, so the system works end to end first. Limit: 512 input tokens, so `CHUNK_TOKENS` must stay below it. `sentence_transformers` remains a provider for **Qwen3-Embedding-0.6B** (Apache 2.0) and `microsoft/harrier-oss-v1-0.6b` (MIT). The final choice comes from **our own recall@k** in a later comparison, not the leaderboard. |
-| D5 | **Hybrid retrieval**: BM25 (`bm25s`) + dense (Chroma), merged with **Reciprocal Rank Fusion** written by hand | Financial text is full of exact terms (tickers, "Item 1A", product names, numbers) where BM25 wins, and paraphrased questions where dense wins. RRF needs no score calibration. `score(d) = Σ 1/(k + rank_i(d))`, k = 60 (Cormack et al., 2009). About 15 lines; unit-tested. |
+| D5 | **Hybrid retrieval**: BM25 (`bm25s`) + dense (Chroma), merged with **Reciprocal Rank Fusion** (LlamaIndex's `QueryFusionRetriever` on `spike/llamaindex`, written by hand on `main`) | Financial text is full of exact terms (tickers, "Item 1A", product names, numbers) where BM25 wins, and paraphrased questions where dense wins. RRF needs no score calibration. `score(d) = Σ 1/(k + rank_i(d))`, k = 60 (Cormack et al., 2009). LlamaIndex counts ranks from 0 and fixes k at 60. |
 | D6 | **Vector store: ChromaDB** (persistent, embedded) | Zero ops, stores text + metadata, good enough for thousands of chunks. Chroma is the **single source of truth** for chunks; the BM25 index is derived from it and can be rebuilt. |
 | D7 | **Citations checked on the server** | Passages are numbered `[1]..[k]` in the prompt; the model must cite `[n]`. The server parses citations, drops numbers that don't exist, renumbers the rest in order of first appearance, and returns only cited passages as `sources`. Zero valid citations → treated as insufficient evidence. |
 | D8 | **"Not enough evidence" path** has two layers | (a) Retrieval gate: if the best dense cosine similarity < `MIN_RELEVANCE` (tuned on the eval set), the LLM is not called. (b) The model is told to reply exactly `INSUFFICIENT_EVIDENCE` if the passages don't answer the question. Either case returns `insufficient_evidence: true`. |
@@ -81,8 +83,11 @@ The brief explicitly says: *"This task tests your judgment and ability to verify
 
 **Backend (`backend/pyproject.toml`)**
 - Runtime: `fastapi`, `uvicorn[standard]`, `pydantic>=2`, `pydantic-settings`, `python-multipart`
+- Orchestration (`spike/llamaindex`): `llama-index-core`, `llama-index-llms-openai-like`,
+  `llama-index-vector-stores-chroma`, `llama-index-retrievers-bm25`, all pinned exactly. PyStemmer is
+  kept at 3.1 through a uv override.
 - Retrieval: `chromadb`, `bm25s` (+ `PyStemmer`), `fastembed`; `sentence-transformers` (CPU `torch`, for the later embedder comparison) as the optional `sentence-transformers` extra, decided by Ivan to keep it out of the default install and the image
-- LLM: `openai` (OpenAI-compatible client), `anthropic`
+- LLM: `openai` (OpenAI-compatible client; `<3` on `spike/llamaindex`). `anthropic` on `main` only
 - Parsing: `beautifulsoup4` + `lxml` (EDGAR HTML), `pypdf` (PDF text layer)
 - Tokens for chunking: the embedder's own tokenizer, through `Embedder.count()`; no extra library
 - HTTP for the fetch script: `httpx`
@@ -114,6 +119,9 @@ The brief explicitly says: *"This task tests your judgment and ability to verify
 
 ### Core interfaces (sketch: implement with `typing.Protocol`)
 
+The original sketch. On `spike/llamaindex` the LLM is a LlamaIndex `LLM` behind `LlamaIndexClient.chat()`,
+the embedders are LlamaIndex `BaseEmbedding`s, and retrieval returns a `SearchResult` (`retrieval/search.py`).
+
 ```python
 class LLMClient(Protocol):
     # Completion(text, input_tokens, output_tokens); token counts are None if not reported
@@ -128,14 +136,18 @@ class Retriever(Protocol):
     def search(self, query: str, k: int, filters: SearchFilters | None = None) -> list[ScoredPassage]: ...
 ```
 
-Implementations:
-- `llm/openai_compatible.py` → `OpenAICompatibleClient(base_url, api_key, model)`
-- `llm/anthropic_client.py` → `AnthropicClient(api_key, model)` (system prompt goes in the `system` parameter)
-- `llm/fake.py` → `FakeLLM` (scripted replies, used in tests)
-- `llm/factory.py` → `build_llm(settings) -> LLMClient` (match on `settings.llm_provider`)
-- `retrieval/embedder.py` → `SentenceTransformerEmbedder`, `FakeEmbedder` (deterministic hash vectors, for tests)
-- `retrieval/dense.py`, `retrieval/sparse.py`, `retrieval/fusion.py` (pure function `rrf(rankings, k=60)`), `retrieval/hybrid.py`
+Implementations (`main` has the original plain-Python modules; this list is `spike/llamaindex`):
+- `llm/llamaindex_client.py` → `LlamaIndexClient(llm)`: a LlamaIndex `LLM` with our error mapping and
+  token counts; `llm/factory.py` → `build_llm(settings)` builds it on `OpenAILike`. Tests use
+  `tests/scripted_llm.py` (`FakeLLM` on a `CustomLLM`)
+- `retrieval/embedder.py` → `FastEmbedEmbedding`, `SentenceTransformerEmbedding` (LlamaIndex `BaseEmbedding`s
+  that also count tokens); `tests/fake_embedding.py` for tests
+- `retrieval/store.py` (`ChromaVectorStore`, node ⇄ domain mapping), `retrieval/bm25.py` (`BM25Retriever`),
+  `retrieval/fusion_retriever.py` (`QueryFusionRetriever` keeping ranks and dense similarity),
+  `retrieval/search.py` (`HybridSearch`: dense + BM25 + RRF + re-ranker)
 - `retrieval/reranker.py` → `Reranker` protocol, `FastEmbedReranker`, `FakeReranker` (word overlap, for tests)
+- `ingestion/tenk_parser.py` (`TenKNodeParser`), `ingestion/indexing.py` (`IngestionPipeline`, docstore, progress)
+- `qa/service.py` → `GroundedQueryEngine` (a `CustomQueryEngine`)
 
 ### Domain models (`domain/models.py`, frozen dataclasses or Pydantic)
 
@@ -218,12 +230,10 @@ alternative (a queue such as Celery/RQ/Arq plus a persisted job table).
 ## 7. Configuration (`config.py`, `pydantic-settings`; `.env.example` mirrors it)
 
 ```
-LLM_PROVIDER=openai_compatible          # openai_compatible | anthropic
+LLM_PROVIDER=openai_compatible          # openai_compatible (anthropic on main only)
 LLM_BASE_URL=https://api.groq.com/openai/v1   # or http://ollama:11434/v1, https://api.openai.com/v1
 LLM_API_KEY=
 LLM_MODEL=                               # check the provider's current model list
-ANTHROPIC_API_KEY=
-ANTHROPIC_MODEL=                         # check Anthropic's current model list
 LLM_TEMPERATURE=0.1
 LLM_MAX_TOKENS=4096                      # thinking models spend this on reasoning too
 LLM_TIMEOUT_SECONDS=60
@@ -237,14 +247,14 @@ CHUNK_TOKENS=400
 CHUNK_OVERLAP=60
 RETRIEVAL_CANDIDATES=20
 TOP_K=6
-RRF_K=60
+RRF_K=60                                 # must be 60 on spike/llamaindex
 MIN_RELEVANCE=0.58                       # tuned for bge-small in M4; retune for any other embedder
 MAX_UPLOAD_MB=20
 CORS_ORIGINS=http://localhost:5173
 
 SEC_USER_AGENT=                          # e.g. "Your Name your@email" (required by SEC EDGAR)
 ```
-Validate on startup: e.g. `anthropic` provider without `ANTHROPIC_API_KEY` → fail fast with a clear message.
+Validate on startup: e.g. `openai_compatible` without `LLM_MODEL`, or `RRF_K` other than 60 → fail fast with a clear message.
 
 ---
 
@@ -285,26 +295,24 @@ novabridge-qa/
 │   │   ├── ingestion/
 │   │   │   ├── loaders/          # one module per format (text, html; pdf next) + suffix registry
 │   │   │   ├── sections.py       # 10-K "Item X" section detection
-│   │   │   ├── chunking.py
-│   │   │   ├── pipeline.py       # ingest_file(path, meta) -> Document
+│   │   │   ├── tenk_parser.py    # TenKNodeParser: sections, then SentenceSplitter
+│   │   │   ├── indexing.py       # IngestionPipeline, docstore, upload progress
 │   │   │   └── jobs.py           # in-memory job registry
 │   │   ├── retrieval/
 │   │   │   ├── embedder.py
-│   │   │   ├── dense.py          # Chroma wrapper
-│   │   │   ├── sparse.py         # bm25s wrapper (build from Chroma, save/load)
-│   │   │   ├── fusion.py         # rrf()
-│   │   │   ├── hybrid.py
+│   │   │   ├── store.py          # ChromaVectorStore + node ⇄ domain mapping
+│   │   │   ├── bm25.py           # BM25Retriever (built from Chroma, save/load)
+│   │   │   ├── fusion_retriever.py # QueryFusionRetriever keeping ranks
+│   │   │   ├── search.py         # HybridSearch
 │   │   │   └── reranker.py       # cross-encoder after fusion
 │   │   ├── llm/
-│   │   │   ├── base.py           # LLMClient Protocol, ChatMessage, LLMError
-│   │   │   ├── openai_compatible.py
-│   │   │   ├── anthropic_client.py
-│   │   │   ├── fake.py
+│   │   │   ├── base.py           # Completion, LLMError
+│   │   │   ├── llamaindex_client.py
 │   │   │   └── factory.py
 │   │   └── qa/
 │   │       ├── prompt.py
 │   │       ├── citations.py
-│   │       └── service.py        # QAService.ask(question, filters) -> Answer
+│   │       └── service.py        # GroundedQueryEngine.ask(question, filters) -> Answer
 │   ├── scripts/
 │   │   ├── fetch_filings.py      # download the 10-Ks from EDGAR into data/raw/
 │   │   └── ingest.py             # (re)build the index from data/raw/
