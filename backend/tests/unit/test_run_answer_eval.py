@@ -18,7 +18,7 @@ from scripted_llm import FakeLLM
 
 from novabridge_qa.domain.models import Chunk, Document, ScoredPassage, SearchFilters
 from novabridge_qa.llm.base import Completion, LLMError, RateLimitError
-from novabridge_qa.qa.service import QAService
+from novabridge_qa.qa.service import GroundedQueryEngine
 from novabridge_qa.retrieval.search import SearchResult
 
 NEW = Question(
@@ -110,9 +110,13 @@ class StubRetriever:
         return SearchResult([ScoredPassage(chunk, DOCUMENT, 1, 1, 0.03, 0.9)], 0.9)
 
 
-def make_qa(*replies: str | Completion | Exception) -> QAService:
-    return QAService(
-        StubRetriever(), FakeLLM(list(replies)), top_k=6, min_relevance=0.5, max_tokens=100
+def make_qa(*replies: str | Completion | Exception) -> GroundedQueryEngine:
+    return GroundedQueryEngine(
+        retriever=StubRetriever(),
+        llm=FakeLLM(list(replies)),
+        top_k=6,
+        min_relevance=0.5,
+        max_tokens=100,
     )
 
 
@@ -122,7 +126,7 @@ def no_pacing() -> TokenPacer:
 
 
 def run(
-    path: Path, questions: Sequence[Question], qa: QAService, only: set[str] | None = None
+    path: Path, questions: Sequence[Question], qa: GroundedQueryEngine, only: set[str] | None = None
 ) -> bool:
     return ask_all(questions, qa, path, no_pacing(), only=only, log=lambda _: None)
 

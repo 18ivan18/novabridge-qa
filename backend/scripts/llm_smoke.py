@@ -7,8 +7,10 @@ import argparse
 import sys
 import time
 
+from llama_index.core.base.llms.types import ChatMessage, MessageRole
+
 from novabridge_qa.config import Settings
-from novabridge_qa.llm.base import ChatMessage, LLMError
+from novabridge_qa.llm.base import LLMError
 from novabridge_qa.llm.factory import build_llm
 
 
@@ -20,9 +22,11 @@ def main() -> None:
 
     started = time.perf_counter()
     try:
-        reply = llm.complete(
-            "Reply with exactly one word.",
-            [ChatMessage("user", "What is the opposite of 'up'?")],
+        reply = llm.chat(
+            [
+                ChatMessage(role=MessageRole.SYSTEM, content="Reply with exactly one word."),
+                ChatMessage(role=MessageRole.USER, content="What is the opposite of 'up'?"),
+            ],
             max_tokens=settings.llm_max_tokens,
         )
     except LLMError as error:

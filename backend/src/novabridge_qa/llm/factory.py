@@ -3,11 +3,11 @@
 from llama_index.llms.openai_like import OpenAILike
 
 from novabridge_qa.config import Settings
-from novabridge_qa.llm.base import MAX_RETRIES, LLMClient
+from novabridge_qa.llm.base import MAX_RETRIES
 from novabridge_qa.llm.llamaindex_client import LlamaIndexClient, read_openai_reply
 
 
-def build_llm(settings: Settings) -> LLMClient:
+def build_llm(settings: Settings) -> LlamaIndexClient:
     """Groq, Ollama or OpenAI through LlamaIndex's OpenAILike, chosen by LLM_BASE_URL."""
     if not settings.llm_model:
         raise ValueError("LLM_PROVIDER=openai_compatible requires LLM_MODEL to be set")

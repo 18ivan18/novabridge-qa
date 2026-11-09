@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 import openai
 import pytest
+from llama_index.core.base.llms.types import ChatMessage, MessageRole
 from openai.types.chat import ChatCompletion, ChatCompletionMessage
 from openai.types.chat.chat_completion import Choice
 from openai.types.completion_usage import CompletionUsage
@@ -16,12 +17,17 @@ from pydantic import SecretStr
 from scripted_llm import FakeLLM
 
 from novabridge_qa.config import Settings
-from novabridge_qa.llm.base import MAX_RETRIES, ChatMessage, Completion, LLMError, RateLimitError
+from novabridge_qa.llm.base import MAX_RETRIES, Completion, LLMError, RateLimitError
 from novabridge_qa.llm.factory import build_llm
 from novabridge_qa.llm.llamaindex_client import LlamaIndexClient
 
 SECRET = "sk-super-secret-value"
-MESSAGES = [ChatMessage("user", "Hello"), ChatMessage("assistant", "Hi"), ChatMessage("user", "?")]
+CONVERSATION = [
+    ChatMessage(role=MessageRole.USER, content="Hello"),
+    ChatMessage(role=MessageRole.ASSISTANT, content="Hi"),
+    ChatMessage(role=MessageRole.USER, content="?"),
+]
+MESSAGES = [ChatMessage(role=MessageRole.SYSTEM, content="be brief"), *CONVERSATION]
 
 
 def openai_settings(**overrides: Any) -> Settings:
@@ -98,7 +104,7 @@ def test_openai_puts_system_first_and_sends_temperature() -> None:
     client = make_openai()
     captured = fake_create(client, openai_reply("answer"))
 
-    assert client.complete("be brief", MESSAGES, max_tokens=50).text == "answer"
+    assert client.chat(MESSAGES, max_tokens=50).text == "answer"
 
     assert captured["messages"][0] == {"role": "system", "content": "be brief"}
     assert [m["role"] for m in captured["messages"][1:]] == ["user", "assistant", "user"]
@@ -111,8 +117,8 @@ def test_max_tokens_is_set_per_call() -> None:
     client = make_openai()
     captured = fake_create(client, openai_reply("answer"))
 
-    client.complete("s", MESSAGES, max_tokens=50)
-    client.complete("s", MESSAGES, max_tokens=7)
+    client.chat(MESSAGES, max_tokens=50)
+    client.chat(MESSAGES, max_tokens=7)
 
     assert captured["max_tokens"] == 7
 
@@ -129,7 +135,7 @@ def test_llamaindex_adds_no_retries_on_top_of_the_sdk() -> None:
     captured = fake_create(client, openai_status_error(503))
 
     with pytest.raises(LLMError):
-        client.complete("s", MESSAGES, max_tokens=50)
+        client.chat(MESSAGES, max_tokens=50)
 
     assert captured["count"] == 1
 
@@ -151,14 +157,14 @@ def test_openai_reports_token_usage() -> None:
     usage = CompletionUsage(prompt_tokens=120, completion_tokens=8, total_tokens=128)
     fake_create(client, openai_reply("answer", usage=usage))
 
-    assert client.complete("s", MESSAGES, max_tokens=50) == Completion("answer", 120, 8)
+    assert client.chat(MESSAGES, max_tokens=50) == Completion("answer", 120, 8)
 
 
 def test_openai_usage_is_none_when_the_provider_omits_it() -> None:
     client = make_openai()
     fake_create(client, openai_reply("answer"))
 
-    assert client.complete("s", MESSAGES, max_tokens=50) == Completion("answer", None, None)
+    assert client.chat(MESSAGES, max_tokens=50) == Completion("answer", None, None)
 
 
 @pytest.mark.parametrize(
@@ -179,7 +185,7 @@ def test_openai_unusable_responses(reply: ChatCompletion, message: str) -> None:
     fake_create(client, reply)
 
     with pytest.raises(LLMError, match=message):
-        client.complete("s", MESSAGES, max_tokens=50)
+        client.chat(MESSAGES, max_tokens=50)
 
 
 # Error normalization
@@ -191,7 +197,7 @@ def test_openai_status_errors_are_normalized(status: int, message: str) -> None:
     fake_create(client, openai_status_error(status))
 
     with pytest.raises(LLMError, match=message) as caught:
-        client.complete("s", MESSAGES, max_tokens=50)
+        client.chat(MESSAGES, max_tokens=50)
 
     assert SECRET not in str(caught.value)
     assert isinstance(caught.value.__cause__, openai.APIStatusError)
@@ -202,7 +208,7 @@ def test_rate_limits_raise_a_distinct_error() -> None:
     fake_create(client, openai_status_error(429))
 
     with pytest.raises(RateLimitError):
-        client.complete("s", MESSAGES, max_tokens=50)
+        client.chat(MESSAGES, max_tokens=50)
 
 
 def test_timeouts_and_connection_errors_are_normalized() -> None:
@@ -214,7 +220,7 @@ def test_timeouts_and_connection_errors_are_normalized() -> None:
     for client, error, message in cases:
         fake_create(client, error)
         with pytest.raises(LLMError, match=message):
-            client.complete("s", MESSAGES, max_tokens=50)
+            client.chat(MESSAGES, max_tokens=50)
 
 
 # Factory
@@ -241,17 +247,17 @@ def test_factory_requires_a_model_for_openai_compatible() -> None:
 def test_fake_llm_replays_its_script_and_records_calls() -> None:
     llm = FakeLLM(["one", Completion("two", 10, 2), LLMError("boom")])
 
-    assert llm.complete("s", MESSAGES, max_tokens=5) == Completion("one")
-    assert llm.complete("s", MESSAGES, max_tokens=5) == Completion("two", 10, 2)
+    assert llm.chat(MESSAGES, max_tokens=5) == Completion("one")
+    assert llm.chat(MESSAGES, max_tokens=5) == Completion("two", 10, 2)
     with pytest.raises(LLMError, match="boom"):
-        llm.complete("s", MESSAGES, max_tokens=5)
+        llm.chat(MESSAGES, max_tokens=5)
 
     assert len(llm.calls) == 3
-    assert llm.calls[0].system == "s"
-    assert llm.calls[0].messages == tuple(MESSAGES)
+    assert llm.calls[0].system == "be brief"
+    assert llm.calls[0].messages == tuple(CONVERSATION)
     assert llm.calls[0].max_tokens == 5
 
 
 def test_fake_llm_fails_when_called_too_often() -> None:
     with pytest.raises(AssertionError):
-        FakeLLM([]).complete("s", MESSAGES, max_tokens=5)
+        FakeLLM([]).chat(MESSAGES, max_tokens=5)

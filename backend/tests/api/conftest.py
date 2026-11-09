@@ -11,7 +11,7 @@ from scripted_llm import FakeLLM
 from novabridge_qa.api.deps import get_qa_service
 from novabridge_qa.config import Settings
 from novabridge_qa.main import create_app
-from novabridge_qa.qa.service import QAService
+from novabridge_qa.qa.service import GroundedQueryEngine
 
 
 @pytest.fixture
@@ -29,8 +29,12 @@ def make_client(app: FastAPI, retriever: StubRetriever) -> ClientFactory:
     """Return a client whose LLM replies with the given script."""
 
     def factory(*replies: str | Exception) -> TestClient:
-        service = QAService(
-            retriever, FakeLLM(list(replies)), top_k=6, min_relevance=0.5, max_tokens=100
+        service = GroundedQueryEngine(
+            retriever=retriever,
+            llm=FakeLLM(list(replies)),
+            top_k=6,
+            min_relevance=0.5,
+            max_tokens=100,
         )
         app.dependency_overrides[get_qa_service] = lambda: service
         # False, so a crash shows up as the 500 a real client would get.

@@ -1,15 +1,27 @@
-"""Answer a question: retrieve, gate, generate, then check the citations."""
+"""Answer a question: retrieve, gate, generate, then check the citations.
+
+`GroundedQueryEngine` is a LlamaIndex `CustomQueryEngine`, so `engine.query("...")` works as for
+any query engine. The app calls `ask()`, which also takes per-request filters and returns
+everything `/api/ask` reports. The gate, the refusal marker, the prompt and the citation check
+are ours: LlamaIndex's response synthesizers have none of them.
+"""
 
 import logging
 import time
 from dataclasses import dataclass
 from typing import Literal
 
+from llama_index.core.base.llms.types import ChatMessage, MessageRole
+from llama_index.core.base.response.schema import Response
+from llama_index.core.query_engine import CustomQueryEngine
+from llama_index.core.schema import NodeWithScore
+
 from novabridge_qa.domain.models import ScoredPassage, SearchFilters
-from novabridge_qa.llm.base import ChatMessage, LLMClient
+from novabridge_qa.llm.llamaindex_client import LlamaIndexClient
 from novabridge_qa.qa.citations import validate
 from novabridge_qa.qa.prompt import INSUFFICIENT_EVIDENCE, SYSTEM_PROMPT, build_user_message
 from novabridge_qa.retrieval.search import Retriever
+from novabridge_qa.retrieval.store import chunk_node
 
 logger = logging.getLogger(__name__)
 
@@ -60,39 +72,45 @@ def passes_relevance_gate(best_similarity: float | None, min_relevance: float) -
     return best_similarity is not None and best_similarity >= min_relevance
 
 
-class QAService:
-    def __init__(
-        self,
-        retriever: Retriever,
-        llm: LLMClient,
-        *,
-        top_k: int,
-        min_relevance: float,
-        max_tokens: int,
-    ) -> None:
-        self._retriever = retriever
-        self._llm = llm
-        self._top_k = top_k
-        self._min_relevance = min_relevance
-        self._max_tokens = max_tokens
+class GroundedQueryEngine(CustomQueryEngine):
+    retriever: Retriever
+    llm: LlamaIndexClient
+    top_k: int
+    min_relevance: float
+    max_tokens: int
+
+    def custom_query(self, query_str: str) -> Response:
+        """`source_nodes` holds the cited passages, numbered as in the text; `metadata["answer"]`
+        the full `Answer`."""
+        answer = self.ask(query_str)
+        cited = [
+            NodeWithScore(
+                node=chunk_node(source.passage.chunk, source.passage.document),
+                score=source.passage.rrf_score,
+            )
+            for source in answer.sources
+        ]
+        return Response(answer.text, source_nodes=cited, metadata={"answer": answer})
 
     def ask(
         self, question: str, filters: SearchFilters | None = None, top_k: int | None = None
     ) -> Answer:
         """Answer from the indexed documents. Raises LLMError if the provider fails."""
         started = time.perf_counter()
-        result = self._retriever.retrieve(question, top_k or self._top_k, filters)
+        result = self.retriever.retrieve(question, top_k or self.top_k, filters)
         passages = tuple(result.passages)
         retrieval_ms = _elapsed_ms(started)
 
-        if not passes_relevance_gate(result.best_similarity, self._min_relevance):
+        if not passes_relevance_gate(result.best_similarity, self.min_relevance):
             return Answer("", True, (), passages, retrieval_ms, 0, refusal="gate")
 
         started = time.perf_counter()
-        completion = self._llm.complete(
-            SYSTEM_PROMPT,
-            [ChatMessage("user", build_user_message(question, passages))],
-            max_tokens=self._max_tokens,
+        completion = self.llm.chat(
+            [
+                ChatMessage(role=MessageRole.SYSTEM, content=SYSTEM_PROMPT),
+                ChatMessage(role=MessageRole.USER, content=build_user_message(question, passages)),
+            ],
+            max_tokens=self.max_tokens,
         )
         generation_ms = _elapsed_ms(started)
 

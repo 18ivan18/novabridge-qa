@@ -1,8 +1,6 @@
-"""The interface every LLM provider implements."""
+"""What a provider call returns, and the errors it raises."""
 
-from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Literal, Protocol
 
 # The SDKs retry timeouts, connection errors, 429s and 5xx themselves, with backoff.
 MAX_RETRIES = 1
@@ -22,24 +20,12 @@ class RateLimitError(LLMError):
 
 
 @dataclass(frozen=True)
-class ChatMessage:
-    role: Literal["user", "assistant"]
-    content: str
-
-
-@dataclass(frozen=True)
 class Completion:
     """A reply and what it cost. Token counts are None when the provider does not report them."""
 
     text: str
     input_tokens: int | None = None
     output_tokens: int | None = None
-
-
-class LLMClient(Protocol):
-    def complete(
-        self, system: str, messages: Sequence[ChatMessage], *, max_tokens: int
-    ) -> Completion: ...
 
 
 def status_error(provider: str, status: int) -> LLMError:

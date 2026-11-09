@@ -2,7 +2,7 @@
 our cross-encoder."""
 
 from dataclasses import dataclass, replace
-from typing import Literal, Protocol
+from typing import Literal, Protocol, runtime_checkable
 
 from llama_index.core import VectorStoreIndex
 from llama_index.core.retrievers import BaseRetriever
@@ -29,6 +29,8 @@ class SearchResult:
     best_similarity: float | None
 
 
+# runtime_checkable, because GroundedQueryEngine is a pydantic model and checks its fields.
+@runtime_checkable
 class Retriever(Protocol):
     def retrieve(
         self, query: str, k: int, filters: SearchFilters | None = None

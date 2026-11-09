@@ -275,3 +275,9 @@ Stage 4 eval: chunk counts are 2,335 / 1,406 / 1,023, against 2,363 / 1,434 / 1,
 - At 200, TXT hybrid MRR rises from 0.503 to 0.537 (m07 moves from rank 9 to 7). HTM dense loses one question at R@1 (MRR 0.608 to 0.589).
 
 The relevance gate table is unchanged.
+
+Found while building stage 5 (Nov 9, 2026):
+
+20. **`query(str)` takes only a string.** `/api/ask` passes filters and `top_k` per request, and reports timings, token counts and the refusal reason. So `GroundedQueryEngine` keeps `ask(question, filters, top_k) -> Answer` as the app's entry point, and `custom_query` wraps it: the `Response` carries the cited passages as `source_nodes`, in citation order, and the `Answer` in `metadata["answer"]`.
+21. **`CustomQueryEngine.query` skips instrumentation.** It overrides `BaseQueryEngine.query` without the `@dispatcher.span` decorator and without the `QueryStartEvent`/`QueryEndEvent` calls. LlamaIndex's instrumentation therefore sees the engine's retriever and LLM spans, but no query span. This is worth knowing before stage 6 adds an instrumentation handler.
+22. **The engine is a pydantic model.** Its fields are type-checked, so the `Retriever` Protocol is now `@runtime_checkable`. Constructor arguments must be keywords.

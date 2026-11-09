@@ -1,4 +1,4 @@
-"""Our `LLMClient` interface on top of a LlamaIndex `LLM`.
+"""A LlamaIndex `LLM` with the error handling the app relies on.
 
 LlamaIndex makes the provider call. This wrapper keeps the behaviour the rest of the app relies on:
 provider errors become `LLMError` messages that are safe to show, replies that arrive as HTTP 200
@@ -10,12 +10,10 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 import openai
-from llama_index.core.base.llms.types import ChatMessage as LIChatMessage
-from llama_index.core.base.llms.types import ChatResponse, MessageRole, TextBlock
+from llama_index.core.base.llms.types import ChatMessage, ChatResponse, TextBlock
 from llama_index.core.llms import LLM
 
 from novabridge_qa.llm.base import (
-    ChatMessage,
     Completion,
     LLMError,
     connection_error,
@@ -60,31 +58,21 @@ def read_openai_reply(reply: ChatResponse, provider: str) -> Completion:
     )
 
 
-def _to_llamaindex(system: str, messages: Sequence[ChatMessage]) -> list[LIChatMessage]:
-    chat = [LIChatMessage(role=MessageRole.SYSTEM, content=system)]
-    for message in messages:
-        role = MessageRole.USER if message.role == "user" else MessageRole.ASSISTANT
-        chat.append(LIChatMessage(role=role, content=message.content))
-    return chat
-
-
 class LlamaIndexClient:
-    """Implements `LLMClient`. The LLM is passed in, never read from LlamaIndex's global
-    `Settings`, whose default is OpenAI."""
+    """The LLM is passed in, never read from LlamaIndex's global `Settings`, whose default is
+    OpenAI."""
 
     def __init__(self, llm: LLM, *, provider: str, read_reply: ReplyReader) -> None:
         self.llm = llm
         self._provider = provider
         self._read_reply = read_reply
 
-    def complete(
-        self, system: str, messages: Sequence[ChatMessage], *, max_tokens: int
-    ) -> Completion:
+    def chat(self, messages: Sequence[ChatMessage], *, max_tokens: int) -> Completion:
         provider = self._provider
         # Both integrations let call kwargs override their defaults, so max_tokens is per call.
         # LlamaIndex re-raises the SDK's own exceptions, so they are mapped as before.
         try:
-            reply = self.llm.chat(_to_llamaindex(system, messages), max_tokens=max_tokens)
+            reply = self.llm.chat(list(messages), max_tokens=max_tokens)
         except openai.APITimeoutError as error:
             raise timeout_error(provider) from error
         except openai.APIConnectionError as error:

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from novabridge_qa.config import Settings
 from novabridge_qa.ingestion.uploads import UploadService
 from novabridge_qa.llm.factory import build_llm
-from novabridge_qa.qa.service import QAService
+from novabridge_qa.qa.service import GroundedQueryEngine
 from novabridge_qa.retrieval.bm25 import NonZeroBM25Retriever, build_bm25, load_bm25, save_bm25
 from novabridge_qa.retrieval.embedder import (
     CountingEmbedding,
@@ -27,7 +27,7 @@ class Container:
 class Services:
     """The objects that need the embedding model and the LLM, built once a server starts."""
 
-    qa: QAService
+    qa: GroundedQueryEngine
     uploads: UploadService
 
 
@@ -84,9 +84,9 @@ def build_services(settings: Settings, store: ChunkStore) -> Services:
         retriever.replace_bm25(rebuild_bm25(settings, store))
 
     return Services(
-        qa=QAService(
-            retriever,
-            llm,
+        qa=GroundedQueryEngine(
+            retriever=retriever,
+            llm=llm,
             top_k=settings.top_k,
             min_relevance=settings.min_relevance,
             max_tokens=settings.llm_max_tokens,

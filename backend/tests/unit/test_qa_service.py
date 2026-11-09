@@ -5,12 +5,14 @@ from pathlib import Path
 import pytest
 from fake_embedding import FakeEmbedding
 from index_helpers import add_chunks
+from llama_index.core.base.response.schema import Response
+from pydantic import ValidationError
 from scripted_llm import FakeLLM
 
 from novabridge_qa.domain.models import Chunk, Document, ScoredPassage, SearchFilters
 from novabridge_qa.llm.base import Completion, LLMError
 from novabridge_qa.qa.prompt import SYSTEM_PROMPT
-from novabridge_qa.qa.service import Answer, QAService
+from novabridge_qa.qa.service import Answer, GroundedQueryEngine
 from novabridge_qa.retrieval.bm25 import build_bm25
 from novabridge_qa.retrieval.search import HybridSearch, SearchResult
 from novabridge_qa.retrieval.store import ChunkStore
@@ -46,10 +48,10 @@ class StubRetriever:
 
 def make_service(
     passages: Sequence[ScoredPassage], *replies: str | Completion | Exception
-) -> QAService:
-    return QAService(
-        StubRetriever(list(passages)),
-        FakeLLM(list(replies)),
+) -> GroundedQueryEngine:
+    return GroundedQueryEngine(
+        retriever=StubRetriever(list(passages)),
+        llm=FakeLLM(list(replies)),
         top_k=6,
         min_relevance=0.5,
         max_tokens=100,
@@ -136,9 +138,9 @@ def test_one_relevant_passage_opens_the_gate() -> None:
 
 def test_a_relevant_candidate_outside_the_top_k_opens_the_gate() -> None:
     # The re-ranker may push the passage dense search liked best out of the top k.
-    service = QAService(
-        StubRetriever([passage(1, 0.1), passage(2, 0.9)]),
-        FakeLLM(["Anvils [1]."]),
+    service = GroundedQueryEngine(
+        retriever=StubRetriever([passage(1, 0.1), passage(2, 0.9)]),
+        llm=FakeLLM(["Anvils [1]."]),
         top_k=1,
         min_relevance=0.5,
         max_tokens=100,
@@ -185,8 +187,8 @@ def test_llm_errors_reach_the_caller() -> None:
 
 def test_the_llm_receives_the_prompt_and_token_limit() -> None:
     llm = FakeLLM(["Anvils [1]."])
-    service = QAService(
-        StubRetriever([passage(1)]), llm, top_k=6, min_relevance=0.5, max_tokens=123
+    service = GroundedQueryEngine(
+        retriever=StubRetriever([passage(1)]), llm=llm, top_k=6, min_relevance=0.5, max_tokens=123
     )
 
     service.ask("Who sells anvils?")
@@ -200,7 +202,9 @@ def test_the_llm_receives_the_prompt_and_token_limit() -> None:
 
 def test_filters_and_top_k_reach_the_retriever() -> None:
     retriever = StubRetriever([passage(1)])
-    service = QAService(retriever, FakeLLM(["A [1]."]), top_k=6, min_relevance=0.5, max_tokens=100)
+    service = GroundedQueryEngine(
+        retriever=retriever, llm=FakeLLM(["A [1]."]), top_k=6, min_relevance=0.5, max_tokens=100
+    )
     filters = SearchFilters(tickers=("ACME",))
 
     service.ask("?", filters, top_k=3)
@@ -210,7 +214,9 @@ def test_filters_and_top_k_reach_the_retriever() -> None:
 
 def test_top_k_defaults_to_the_setting() -> None:
     retriever = StubRetriever([passage(1)])
-    service = QAService(retriever, FakeLLM(["A [1]."]), top_k=6, min_relevance=0.5, max_tokens=100)
+    service = GroundedQueryEngine(
+        retriever=retriever, llm=FakeLLM(["A [1]."]), top_k=6, min_relevance=0.5, max_tokens=100
+    )
 
     service.ask("?")
 
@@ -224,11 +230,46 @@ def test_end_to_end_with_a_real_index(tmp_path: Path) -> None:
     add_chunks(store, DOCUMENT, chunks)
     bm25 = build_bm25(store.all_nodes(), 5)
     retriever = HybridSearch(FakeEmbedding(), store, bm25, candidates=5)
-    service = QAService(
-        retriever, FakeLLM(["ACME sells anvils [1]."]), top_k=2, min_relevance=0.1, max_tokens=100
+    service = GroundedQueryEngine(
+        retriever=retriever,
+        llm=FakeLLM(["ACME sells anvils [1]."]),
+        top_k=2,
+        min_relevance=0.1,
+        max_tokens=100,
     )
 
     answer = service.ask("Who sells anvils to coyotes?")
 
     assert answer.text == "ACME sells anvils [1]."
     assert answer.sources[0].passage.chunk.text == texts[0]
+
+
+def test_query_returns_a_llamaindex_response_with_the_cited_nodes() -> None:
+    service = make_service([passage(1), passage(2), passage(3)], "Anvils [3]. Roofs [1].")
+
+    response = service.query("?")
+
+    assert isinstance(response, Response)
+    assert response.response == "Anvils [1]. Roofs [2]."
+    assert [hit.node.node_id for hit in response.source_nodes] == ["doc:3", "doc:1"]
+    assert response.source_nodes[0].score == 0.03
+    answer = response.metadata["answer"] if response.metadata else None
+    assert isinstance(answer, Answer)
+    assert answer.refusal is None
+
+
+def test_query_refusal_has_no_source_nodes() -> None:
+    response = make_service([passage(1, 0.1)]).query("?")
+
+    assert isinstance(response, Response)
+    assert response.response == ""
+    assert response.source_nodes == []
+    assert response.metadata is not None
+    assert response.metadata["answer"].refusal == "gate"
+
+
+def test_a_retriever_without_retrieve_is_rejected() -> None:
+    with pytest.raises(ValidationError):
+        GroundedQueryEngine(
+            retriever=object(), llm=FakeLLM([]), top_k=6, min_relevance=0.5, max_tokens=100
+        )

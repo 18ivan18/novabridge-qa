@@ -4,8 +4,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from llama_index.core.base.llms.types import ChatMessage as LIChatMessage
 from llama_index.core.base.llms.types import (
+    ChatMessage,
     ChatResponse,
     CompletionResponse,
     CompletionResponseGen,
@@ -15,7 +15,7 @@ from llama_index.core.base.llms.types import (
 from llama_index.core.llms import CustomLLM
 from pydantic import Field
 
-from novabridge_qa.llm.base import ChatMessage, Completion
+from novabridge_qa.llm.base import Completion
 from novabridge_qa.llm.llamaindex_client import LlamaIndexClient, reply_text
 
 Reply = str | Completion | Exception
@@ -42,19 +42,15 @@ class ScriptedLLM(CustomLLM):
     def metadata(self) -> LLMMetadata:
         return LLMMetadata(is_chat_model=True, model_name="scripted")
 
-    def chat(self, messages: Sequence[LIChatMessage], **kwargs: Any) -> ChatResponse:
+    def chat(self, messages: Sequence[ChatMessage], **kwargs: Any) -> ChatResponse:
         system = "".join(m.content or "" for m in messages if m.role == MessageRole.SYSTEM)
-        conversation = tuple(
-            ChatMessage("user" if m.role == MessageRole.USER else "assistant", m.content or "")
-            for m in messages
-            if m.role != MessageRole.SYSTEM
-        )
+        conversation = tuple(m for m in messages if m.role != MessageRole.SYSTEM)
         self.calls.append(RecordedCall(system, conversation, kwargs["max_tokens"]))
         reply = self._next()
         # The same keys LlamaIndex's OpenAI integration uses for token counts.
         usage = {"prompt_tokens": reply.input_tokens, "completion_tokens": reply.output_tokens}
         return ChatResponse(
-            message=LIChatMessage(role=MessageRole.ASSISTANT, content=reply.text),
+            message=ChatMessage(role=MessageRole.ASSISTANT, content=reply.text),
             additional_kwargs=usage,
         )
 
@@ -85,7 +81,7 @@ def read_scripted_reply(reply: ChatResponse, provider: str) -> Completion:
 
 
 class FakeLLM(LlamaIndexClient):
-    """`LLMClient` over a `ScriptedLLM`. A plain string becomes a Completion with no token
+    """`LlamaIndexClient` over a `ScriptedLLM`. A plain string becomes a Completion with no token
     counts."""
 
     def __init__(self, replies: list[Reply]) -> None:

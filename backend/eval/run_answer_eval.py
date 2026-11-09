@@ -45,7 +45,7 @@ from novabridge_qa.domain.models import ScoredPassage
 from novabridge_qa.ingestion.corpus import load_corpus
 from novabridge_qa.ingestion.loaders import load_file
 from novabridge_qa.llm.base import LLMError, RateLimitError
-from novabridge_qa.qa.service import Answer, QAService
+from novabridge_qa.qa.service import Answer, GroundedQueryEngine
 
 EVAL_DIR = Path(__file__).parent
 RUNS_DIR = EVAL_DIR / "answer_runs"
@@ -173,7 +173,7 @@ def append(path: Path, record: Record) -> None:
 
 def ask_all(
     questions: Sequence[Question],
-    qa: QAService,
+    qa: GroundedQueryEngine,
     path: Path,
     pacer: TokenPacer,
     *,
