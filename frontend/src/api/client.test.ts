@@ -1,6 +1,22 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, askQuestion, getDocuments, uploadDocument } from "./client";
+import { makeResponse } from "@/test/fixtures";
+
+import { ApiError, askQuestion, getConfig, getDocuments, uploadDocument } from "./client";
+import type { LibraryDocument } from "./types";
+
+const DOCUMENT: LibraryDocument = {
+  doc_id: "doc",
+  title: "ACME Corp · Form 10-K",
+  company: "ACME Corp",
+  ticker: "ACME",
+  doc_type: "10-K",
+  period_end: "2025-09-27",
+  source: "edgar",
+  filename: "acme.txt",
+  ingested_at: "2025-11-01T09:30:00Z",
+  chunks: 12,
+};
 
 function stubFetch(response: Response | Error) {
   const mock = vi.fn(() =>
@@ -21,14 +37,45 @@ async function failure(call: () => Promise<unknown>): Promise<ApiError> {
 }
 
 describe("api client", () => {
-  it("returns the parsed body", async () => {
-    stubFetch(json([{ doc_id: "doc" }]));
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
-    expect(await getDocuments()).toEqual([{ doc_id: "doc" }]);
+  it("returns the parsed body", async () => {
+    stubFetch(json([DOCUMENT]));
+
+    expect(await getDocuments()).toEqual([DOCUMENT]);
+  });
+
+  it("reads the upload limits from the config endpoint", async () => {
+    const mock = stubFetch(json({ upload_types: [".md", ".txt"], max_upload_mb: 20 }));
+
+    expect(await getConfig()).toEqual({ upload_types: [".md", ".txt"], max_upload_mb: 20 });
+    const [path] = mock.mock.calls[0] as unknown as [string];
+    expect(path).toBe("/api/config");
+  });
+
+  it("does not warn about a response that matches its schema", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    stubFetch(json(makeResponse()));
+
+    await askQuestion({ question: "Who sells anvils?" });
+
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("warns about an unexpected response but still returns it", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const renamed = { ...DOCUMENT, chunks: undefined, chunk_count: 12 };
+    stubFetch(json([renamed]));
+
+    expect(await getDocuments()).toEqual([renamed]);
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn.mock.calls[0]?.[0]).toBe("Unexpected response from /api/documents");
   });
 
   it("posts questions as JSON", async () => {
-    const mock = stubFetch(json({}));
+    const mock = stubFetch(json(makeResponse()));
 
     await askQuestion({ question: "Who sells anvils?" });
 

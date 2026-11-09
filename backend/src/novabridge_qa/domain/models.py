@@ -1,5 +1,6 @@
 """Core domain types, independent of the API and storage layers."""
 
+import hashlib
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Literal
@@ -27,6 +28,16 @@ class Document(DocumentMeta):
 
     doc_id: str
     ingested_at: datetime
+
+
+def make_doc_id(raw: bytes) -> str:
+    """The sha256 of a file's bytes, so a file uploaded twice is indexed once."""
+    return hashlib.sha256(raw).hexdigest()
+
+
+def make_chunk_id(doc_id: str, position: int) -> str:
+    """Chunk 0's id also marks a document as fully indexed: the dense index writes it last."""
+    return f"{doc_id}:{position}"
 
 
 @dataclass(frozen=True)

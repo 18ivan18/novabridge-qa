@@ -32,11 +32,18 @@ def is_supported(name: str) -> bool:
     return Path(name).suffix.lower() in LOADERS
 
 
-def load_file(path: Path) -> LoadedDocument:
-    loader = LOADERS.get(path.suffix.lower())
+def loader_for(name: str) -> Loader:
+    """The loader for a file name's suffix. The error message lists the accepted types, because
+    uploads show it to users."""
+    loader = LOADERS.get(Path(name).suffix.lower())
     if loader is None:
-        raise UnsupportedFormatError(f"Unsupported file type: {path.suffix or path.name}")
-    return loader(path.read_bytes())
+        allowed = ", ".join(sorted(SUPPORTED_SUFFIXES))
+        raise UnsupportedFormatError(f"Unsupported file type. Accepted types: {allowed}.")
+    return loader
+
+
+def load_file(path: Path) -> LoadedDocument:
+    return loader_for(path.name)(path.read_bytes())
 
 
 __all__ = [
@@ -53,5 +60,6 @@ __all__ = [
     "load_file",
     "load_html",
     "load_text",
+    "loader_for",
     "strip_edgar_markup",
 ]

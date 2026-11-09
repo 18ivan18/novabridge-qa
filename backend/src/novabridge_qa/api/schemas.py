@@ -47,6 +47,19 @@ class HealthResponse(BaseModel):
     chunks: int = Field(description="Passages in the index.")
 
 
+class ConfigResponse(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [{"upload_types": [".htm", ".html", ".md", ".txt"], "max_upload_mb": 20}]
+        }
+    )
+
+    upload_types: list[str] = Field(
+        description="File suffixes that uploads accept, lowercase and sorted."
+    )
+    max_upload_mb: int = Field(description="The largest file an upload accepts, in megabytes.")
+
+
 class ErrorResponse(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={"examples": [{"detail": "The LLM provider rejected the API key."}]}

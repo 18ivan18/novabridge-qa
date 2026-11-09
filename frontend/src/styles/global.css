@@ -35,6 +35,8 @@
   --color-error-bg: var(--error-bg);
   --color-error-border: var(--error-border);
   --color-error-fg: var(--error-fg);
+  --color-dropzone-border: var(--dropzone-border);
+  --color-dropzone-bg: var(--dropzone-bg);
 }
 
 @layer base {

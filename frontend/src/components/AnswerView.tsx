@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AskResponse } from "@/api/types";
 import { AnswerCard } from "@/components/AnswerCard";
 import { SourceCard } from "@/components/SourceCard";
+import { SectionLabel } from "@/components/SectionLabel";
 import { passageLabel, plural, retrievalLine } from "@/lib/format";
 
 const HIGHLIGHT_MS = 2000;
@@ -54,12 +55,7 @@ export function AnswerView({ question, scopeLabel, response }: AnswerViewProps) 
         className="flex min-w-0 flex-[2_1_320px] flex-col gap-3"
       >
         <div className="flex items-baseline justify-between gap-2">
-          <h2
-            id="sources-title"
-            className="text-xs font-semibold tracking-[0.06em] text-muted-foreground uppercase"
-          >
-            Sources
-          </h2>
+          <SectionLabel id="sources-title">Sources</SectionLabel>
           <span className="text-xs text-muted-foreground">
             {sources.length} cited of {retrieved.length} retrieved
           </span>

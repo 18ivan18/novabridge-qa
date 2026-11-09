@@ -3,6 +3,7 @@ import { Upload } from "lucide-react";
 import type { LibraryDocument } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SectionLabel } from "@/components/SectionLabel";
 import { documentBadge, documentDetails } from "@/lib/format";
 
 interface DocumentLibraryProps {
@@ -53,9 +54,7 @@ export function DocumentLibrary({ documents, isError, onUpload }: DocumentLibrar
       aria-label="Document library"
       className="flex flex-[1_1_260px] flex-col gap-4 border-r bg-card p-5"
     >
-      <h2 className="text-xs font-semibold tracking-[0.06em] text-muted-foreground uppercase">
-        Document library
-      </h2>
+      <SectionLabel>Document library</SectionLabel>
       <Button
         variant="outline"
         onClick={onUpload}

@@ -9,7 +9,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from novabridge_qa.api import routes_ask, routes_documents, routes_health
+from novabridge_qa.api import routes_ask, routes_config, routes_documents, routes_health
 from novabridge_qa.api.schemas import ErrorResponse
 from novabridge_qa.config import Settings
 from novabridge_qa.container import Container, build_container, build_services
@@ -71,6 +71,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             {"name": "questions", "description": "Ask questions of the library."},
             {"name": "documents", "description": "List the library and add to it."},
             {"name": "health", "description": "Service status."},
+            {"name": "config", "description": "Limits for clients to apply."},
         ],
         responses={500: {"model": ErrorResponse, "description": "An unexpected error."}},
         lifespan=lifespan,
@@ -92,6 +93,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_exception_handler(Exception, handle_unexpected_error)
 
     app.include_router(routes_health.router, prefix="/api")
+    app.include_router(routes_config.router, prefix="/api")
     app.include_router(routes_ask.router, prefix="/api")
     app.include_router(routes_documents.router, prefix="/api")
     return app

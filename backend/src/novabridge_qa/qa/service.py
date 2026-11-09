@@ -2,7 +2,7 @@
 
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal
 
 from novabridge_qa.domain.models import ScoredPassage, SearchFilters
@@ -31,12 +31,11 @@ Refusal = Literal["gate", "model", "no_citations"]
 class Answer:
     """`retrieved` is always filled: the UI lists it as closest passages when nothing is cited.
 
-    `refusal` is set exactly when `insufficient_evidence` is. Token counts are None when the LLM
-    was not called or its provider does not report them.
+    `text` is empty when `refusal` is set. Token counts are None when the LLM was not called or
+    its provider does not report them.
     """
 
     text: str
-    insufficient_evidence: bool
     sources: tuple[Source, ...]
     retrieved: tuple[ScoredPassage, ...]
     retrieval_ms: int
@@ -44,6 +43,10 @@ class Answer:
     refusal: Refusal | None = None
     input_tokens: int | None = None
     output_tokens: int | None = None
+
+    @property
+    def insufficient_evidence(self) -> bool:
+        return self.refusal is not None
 
 
 def _elapsed_ms(started: float) -> int:
@@ -86,7 +89,14 @@ class QAService:
         retrieval_ms = _elapsed_ms(started)
 
         if not passes_relevance_gate(result.best_similarity, self._min_relevance):
-            return Answer("", True, (), passages, retrieval_ms, 0, refusal="gate")
+            return Answer(
+                text="",
+                sources=(),
+                retrieved=passages,
+                retrieval_ms=retrieval_ms,
+                generation_ms=0,
+                refusal="gate",
+            )
 
         started = time.perf_counter()
         completion = self._llm.complete(
@@ -94,26 +104,20 @@ class QAService:
             [ChatMessage("user", build_user_message(question, passages))],
             max_tokens=self._max_tokens,
         )
-        generation_ms = _elapsed_ms(started)
-
-        def answer(
-            text: str, sources: tuple[Source, ...] = (), refusal: Refusal | None = None
-        ) -> Answer:
-            return Answer(
-                text,
-                refusal is not None,
-                sources,
-                passages,
-                retrieval_ms,
-                generation_ms,
-                refusal=refusal,
-                input_tokens=completion.input_tokens,
-                output_tokens=completion.output_tokens,
-            )
+        # Everything known once the LLM has replied. Each outcome below fills in the rest.
+        generated = Answer(
+            text="",
+            sources=(),
+            retrieved=passages,
+            retrieval_ms=retrieval_ms,
+            generation_ms=_elapsed_ms(started),
+            input_tokens=completion.input_tokens,
+            output_tokens=completion.output_tokens,
+        )
 
         # `in`, not `==`: a model that adds a word or a full stop still means the same thing.
         if INSUFFICIENT_EVIDENCE in completion.text:
-            return answer("", refusal="model")
+            return replace(generated, refusal="model")
 
         validated = validate(completion.text, len(passages))
         if validated.dropped_ids:
@@ -121,10 +125,10 @@ class QAService:
         if not validated.cited_ids_in_order:
             # Worth a warning: this looks the same to users as the model finding no evidence.
             logger.warning("Discarded an LLM reply with no valid citations")
-            return answer("", refusal="no_citations")
+            return replace(generated, refusal="no_citations")
 
         sources = tuple(
             Source(new_id, passages[passage_id - 1])
             for new_id, passage_id in enumerate(validated.cited_ids_in_order, start=1)
         )
-        return answer(validated.text, sources)
+        return replace(generated, text=validated.text, sources=sources)

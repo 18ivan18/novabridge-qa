@@ -1,6 +1,8 @@
+import { useQuery } from "@tanstack/react-query";
 import { FileUp, X } from "lucide-react";
 import { useRef, useState, type DragEvent } from "react";
 
+import { getConfig } from "@/api/client";
 import type { UploadTags } from "@/api/types";
 import { NativeSelect } from "@/components/NativeSelect";
 import { UploadQueueItem } from "@/components/UploadQueueItem";
@@ -15,10 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { UploadQueue } from "@/hooks/useUploadQueue";
-import { DOC_TYPES, docTypeLabel, plural } from "@/lib/format";
-
-// Mirrors the backend's loaders. PDF joins these when its loader arrives.
-const ACCEPTED = ".txt,.md,.htm,.html";
+import { DOC_TYPES, docTypeLabel, plural, uploadLimits } from "@/lib/format";
 
 const FIELD_LABEL = "text-[13px] font-normal text-muted-foreground";
 const FIELD_INPUT = "h-11 rounded-lg border-input bg-card";
@@ -31,6 +30,9 @@ interface UploadDialogProps {
 
 export function UploadDialog({ open, onOpenChange, queue }: UploadDialogProps) {
   const [tags, setTags] = useState<UploadTags>({ company: "", doc_type: "other", period_end: "" });
+  // The server's limits only change on a restart. Until they load, any file can be picked: the
+  // upload endpoint checks the same limits itself.
+  const config = useQuery({ queryKey: ["config"], queryFn: getConfig, staleTime: Infinity });
   // Radix only returns focus to a DialogTrigger, and this dialog opens from more than one place.
   const opener = useRef<HTMLElement | null>(null);
   const readyCount = queue.rows.filter((row) => row.view.kind === "ready").length;
@@ -85,7 +87,7 @@ export function UploadDialog({ open, onOpenChange, queue }: UploadDialogProps) {
         <div
           onDragOver={(event) => event.preventDefault()}
           onDrop={handleDrop}
-          className="flex flex-col items-center gap-2.5 rounded-xl border-[1.5px] border-dashed border-[#A9A59A] bg-[#FAFAF7] px-5 py-7 text-center"
+          className="flex flex-col items-center gap-2.5 rounded-xl border-[1.5px] border-dashed border-dropzone-border bg-dropzone-bg px-5 py-7 text-center"
         >
           <FileUp aria-hidden="true" className="size-8 text-muted-foreground" strokeWidth={1.6} />
           <p className="text-base font-medium">Drag files here, or</p>
@@ -98,7 +100,7 @@ export function UploadDialog({ open, onOpenChange, queue }: UploadDialogProps) {
               id="file-input"
               type="file"
               multiple
-              accept={ACCEPTED}
+              accept={config.data?.upload_types.join(",")}
               onChange={(event) => {
                 queue.addFiles(Array.from(event.target.files ?? []));
                 // Lets the same file be chosen again after it is removed.
@@ -107,7 +109,9 @@ export function UploadDialog({ open, onOpenChange, queue }: UploadDialogProps) {
               className="sr-only"
             />
           </label>
-          <p className="text-[13px] text-muted-foreground">TXT, Markdown or HTML · up to 20 MB each</p>
+          {config.data && (
+            <p className="text-[13px] text-muted-foreground">{uploadLimits(config.data)}</p>
+          )}
         </div>
 
         <fieldset className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3">

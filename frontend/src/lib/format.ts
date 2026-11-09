@@ -1,4 +1,4 @@
-import type { DocType, LibraryDocument, Passage } from "@/api/types";
+import type { ClientConfig, DocType, LibraryDocument, Passage } from "@/api/types";
 
 const DOC_TYPE_LABELS: Record<DocType, string> = {
   "10-K": "Form 10-K",
@@ -90,4 +90,23 @@ export function fileSize(bytes: number): string {
 
 export function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+const FILE_TYPE_NAMES: Record<string, string> = {
+  ".htm": "HTML",
+  ".html": "HTML",
+  ".md": "Markdown",
+  ".pdf": "PDF",
+  ".txt": "TXT",
+};
+
+/** The upload hint, such as "HTML, Markdown or TXT · up to 20 MB each", from GET /api/config. */
+export function uploadLimits(config: ClientConfig): string {
+  const names = [
+    ...new Set(
+      config.upload_types.map((suffix) => FILE_TYPE_NAMES[suffix] ?? suffix.slice(1).toUpperCase()),
+    ),
+  ];
+  const types = names.length > 1 ? `${names.slice(0, -1).join(", ")} or ${names.at(-1)}` : names[0];
+  return join([types ?? null, `up to ${config.max_upload_mb} MB each`]);
 }

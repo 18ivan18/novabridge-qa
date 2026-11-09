@@ -2,6 +2,7 @@ import { CircleAlert } from "lucide-react";
 
 import type { Passage } from "@/api/types";
 import { Button } from "@/components/ui/button";
+import { SectionLabel } from "@/components/SectionLabel";
 import { passageLabel } from "@/lib/format";
 
 interface NoEvidenceCardProps {
@@ -29,9 +30,7 @@ export function NoEvidenceCard({ retrieved, onUpload, onRephrase }: NoEvidenceCa
       </div>
       {retrieved.length > 0 && (
         <div className="flex flex-col gap-2.5">
-          <h2 className="text-xs font-semibold tracking-[0.06em] text-muted-foreground uppercase">
-            Closest passages found
-          </h2>
+          <SectionLabel>Closest passages found</SectionLabel>
           <ul className="flex flex-col gap-2">
             {retrieved.map((passage) => (
               <li

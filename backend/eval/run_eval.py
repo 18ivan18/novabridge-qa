@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import get_args
 
 from novabridge_qa.config import Settings
-from novabridge_qa.container import build_embedder, build_reranker
+from novabridge_qa.container import build_embedder, build_reranker, make_retriever
 from novabridge_qa.domain.models import DocumentMeta, ScoredPassage
 from novabridge_qa.ingestion.corpus import load_corpus
 from novabridge_qa.ingestion.loaders import load_file
@@ -190,16 +190,8 @@ def build_retriever(
             chunk_tokens=chunk_tokens,
             chunk_overlap=settings.chunk_overlap,
         )
-    retriever = HybridRetriever(
-        embedder,
-        dense,
-        SparseIndex.build(dense.all_passages()),
-        candidates=settings.retrieval_candidates,
-        rrf_k=settings.rrf_k,
-        reranker=reranker,
-        rerank_candidates=settings.rerank_candidates,
-    )
-    return retriever, dense
+    sparse = SparseIndex.build(dense.all_passages())
+    return make_retriever(settings, embedder, dense, sparse, reranker), dense
 
 
 @dataclass(frozen=True)
