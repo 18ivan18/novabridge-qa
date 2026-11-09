@@ -262,3 +262,16 @@ Found while building stage 3 (Nov 9, 2026):
     - When the index is built in memory rather than loaded, `bm25.corpus` is `None`, and a filtered copy then ignores the filter. The subclass fills it in.
 
 Stage 3 eval: every recall, MRR, candidate-recall, miss and gate row in `eval/results.md` is identical to `main`. Only the latencies differ, within run-to-run noise.
+
+Found while building stage 4 (Nov 9, 2026):
+
+17. **`SentenceSplitter`'s sentence tokenizer knows no abbreviations.** It builds `PunktSentenceTokenizer()` with no training data, so it cuts after "Mr.", "Ltd.", "Inc.", "Co.", "No.", "Dr." and "U.S.", even before a lowercase word. With the stock splitter at 400 tokens, 39 of 1,035 chunks in the corpus ended on one of them, for example "…From 1985 to 1993, Mr." and "…(Case No.". `TenKNodeParser` passes our boundary rule (blank lines, plus the abbreviation guard from `chunking.py`) as `chunking_tokenizer_fn`. SentenceSplitter still does the packing, the overlap and the fallbacks. With our rule, the chunks that end on an abbreviation in the corpus all end a sentence ("…Form 10-K.", "…outside the U.S."). This also means NLTK's `punkt_tab` data is never loaded.
+18. **The fallback splits at commas.** A sentence too long for one window is split by `[^,.;]+[,.;]?` before spaces, which cuts inside numbers such as "1,234" in tables. `secondary_chunking_regex` now splits at line breaks (table rows) first, as `main` did.
+19. **Chunk size stays text-only.** The sketch used `split_text_metadata_aware` with `chunk_size` near 460, so the size would include the "title · section" header. The spike calls `split_text`, so `CHUNK_TOKENS` keeps its meaning on `main` and the 200/300/400 sweep compares like for like. At 400 tokens of text plus a header of 10–30, the indexed string is still under bge's 512.
+
+Stage 4 eval: chunk counts are 2,335 / 1,406 / 1,023, against 2,363 / 1,434 / 1,028 on `main`. R@6 for reranked and hybrid is identical to `main` at all three sizes, on both question sets.
+- At 400 (the default), every quality row is unchanged.
+- At 300, TXT dense R@20 rises from 0.86 to 0.90 and either-retriever recall from 0.90 to 0.95. Hybrid MRR drops from 0.552 to 0.549.
+- At 200, TXT hybrid MRR rises from 0.503 to 0.537 (m07 moves from rank 9 to 7). HTM dense loses one question at R@1 (MRR 0.608 to 0.589).
+
+The relevance gate table is unchanged.

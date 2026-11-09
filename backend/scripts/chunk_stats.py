@@ -12,7 +12,7 @@ from novabridge_qa.config import Settings
 from novabridge_qa.container import build_embedder
 from novabridge_qa.domain.models import Chunk
 from novabridge_qa.ingestion.corpus import load_corpus
-from novabridge_qa.ingestion.pipeline import chunk_file
+from novabridge_qa.ingestion.tenk_parser import chunk_file
 
 
 def print_distribution(label: str, sizes: list[int]) -> None:
