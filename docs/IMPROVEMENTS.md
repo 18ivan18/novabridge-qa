@@ -23,7 +23,8 @@ Work through these in order. Each task is written so an agent can start it cold.
       approved the new questions and tried them in the UI.
 - [x] 2. End-to-end answer evaluation. Branch `feat/answer-eval`. A `--repeat` option for several
       runs is left for later.
-- [ ] 3. Every figure in an answer must appear in a passage it cites
+- [x] ~~3. Every figure in an answer must appear in a passage it cites~~ **Dropped**: too specific
+      to the documents. A domain-neutral claim check is preferred.
 - [x] 4. Cross-encoder re-ranker. Branch `feat/reranker`. `jina-reranker-v1-tiny-en` on the top 20
       after RRF; Ivan chose 20 candidates and to keep the dense relevance gate.
 - [ ] 5. Embedder comparison (M8c)
@@ -32,8 +33,7 @@ Work through these in order. Each task is written so an agent can start it cold.
 - [ ] 8. PDF loader (M8b, part 2)
 - [ ] 9. A separate database for production, such as pgvector, keeping our BM25
 - [ ] 10. LLM-as-judge
-- [ ] 11. Keep HTML table columns aligned. **Next**, before task 3: it produces wrong figures with
-      citations.
+- [ ] 11. Keep HTML table columns aligned. **Next**: it produces wrong figures with citations.
 
 ---
 
@@ -88,7 +88,7 @@ one-off script that is not in the repository, checked by pattern rather than by 
 - **Evidence cited:** the passage with the evidence is among the sources.
 - **Correct refusals:** unanswerable questions that got no answer, split into refused by the gate
   and refused by the model.
-- **Figure check:** sentences flagged by task 3, once it exists.
+- **Figure check:** not planned, because task 3 was dropped.
 - Latency and tokens used.
 
 It must pace itself under the rate limit, save raw outputs so a run can be read again without
@@ -100,6 +100,10 @@ instead of the one-off numbers.
 ---
 
 ## 3. Every figure in an answer must appear in a passage it cites
+
+**Dropped by Ivan.** Matching figures needs rules for these documents in particular: fractions,
+units and table scales such as "in millions". A domain-neutral check that cited passages support
+each claim is preferred. The plan is kept below for reference.
 
 **Why:** citation validation proves that a cited passage was retrieved, not that it supports the
 sentence. A deterministic check on figures closes the most damaging case for financial answers: a
@@ -203,7 +207,7 @@ choice and why.
 **Why:** the answer appears all at once after generation. Streaming shows text within a second or so.
 
 **This conflicts with server-side checking.** Citations are validated and renumbered after the whole
-answer exists (D7), and task 3 checks every sentence. Streamed text cannot be checked before it is
+answer exists (D7). Streamed text cannot be checked before it is
 sent. Choose one, and write the choice into D7:
 - Stream the raw text as a preview, then send a final event with the checked answer that replaces
   it. Simple, but the user may see a citation or sentence disappear.
@@ -231,7 +235,7 @@ supporting sentence themselves.
 
 **Scope:**
 - For each cited sentence of the answer, find the sentence in the passage that best supports it.
-  Start with something deterministic: shared figures (from task 3) and word overlap. Embedding
+  Start with something deterministic: shared figures and word overlap. Embedding
   similarity with the existing embedder is the fallback. Do not ask the LLM for quotes unless the
   deterministic approach measurably fails.
 - Return the matching character ranges in the API, and highlight them in `SourceCard.tsx`, scrolling
@@ -296,8 +300,8 @@ sources overall, or whether a refusal was right.
   report how often they agree.
 - It runs in evaluation only, never on users' requests, so it adds no latency to the app.
 
-**Note:** task 3 already catches unsupported figures deterministically. The judge is for what rules
-cannot catch, so it should not replace the figure check.
+**Note:** task 3, a rule-based figure check, was dropped as too specific to these documents, so
+the judge is also what would catch unsupported figures.
 
 **Done when:** the judge's scores and its agreement with the hand grades are in the evaluation
 results.

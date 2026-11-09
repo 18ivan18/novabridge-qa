@@ -62,9 +62,11 @@ flowchart TD
     subgraph Question["Answering a question"]
         Q[Question] --> D[Dense search, top 20]
         Q --> K[BM25 search, top 20]
-        D --> R[Reciprocal Rank Fusion, top 6]
+        D --> R[Reciprocal Rank Fusion, top 20]
         K --> R
-        R --> G{Relevance gate}
+        R --> RR[Cross-encoder re-ranker, top 6]
+        RR --> G{Relevance gate}
+        D -. best dense similarity among the candidates .-> G
         G -- too low --> N[No answer written]
         G -- passes --> P[Prompt with numbered passages] --> M[LLM]
         M --> X{Citation check}
@@ -134,7 +136,8 @@ not in the fused top 20, or not found at all. The model comparison is in
 [decisions.md](backend/eval/decisions.md) under "Re-ranker".
 
 **Tuned:** `CHUNK_TOKENS` stayed at 400, `TOP_K` at 6 and `MIN_RELEVANCE` became 0.58. Adding the
-indexing header raised hybrid R@6 from 0.76 to 0.86.
+indexing header raised hybrid R@6 from 0.76 to 0.86, measured when only the TXT filings were
+indexed, so it is not comparable with the table above.
 
 **Read these with care.** One question moves recall by 0.048, most gaps are one or two questions, and
 the same questions guided the tuning, so the scores are optimistic. Hybrid is a judgment call rather
@@ -218,9 +221,9 @@ cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy
 cd frontend && npm run lint && npm run typecheck && npm test
 ```
 
-- **Backend (318 tests):** loaders (TXT and HTML), chunking, sections, RRF, re-ranking, citations, prompts, settings, the QA service with
+- **Backend (323 tests):** loaders (TXT and HTML), chunking, sections, RRF, re-ranking, citations, prompts, settings, the QA service with
   fakes, and the API through `TestClient`. No network or API keys needed.
-- **Frontend (31 tests):** citation rendering, retrieval details, API client errors and upload queue state. These are
+- **Frontend (38 tests):** citation rendering, retrieval details, API client errors, response schema checks and upload queue state. These are
   deliberately few. The full flow was checked by hand-written scripts in a real browser rather than
   automated tests in the repository.
 - **Retrieval quality:** `eval/run_eval.py`, run by hand, with results committed.
