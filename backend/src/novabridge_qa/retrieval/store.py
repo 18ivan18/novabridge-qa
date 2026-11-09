@@ -16,6 +16,7 @@ from chromadb.config import Settings as ChromaSettings
 from llama_index.core.schema import BaseNode, NodeRelationship, RelatedNodeInfo, TextNode
 from llama_index.core.vector_stores import FilterOperator, MetadataFilter, MetadataFilters
 from llama_index.vector_stores.chroma import ChromaVectorStore
+from pydantic import PrivateAttr
 
 from novabridge_qa.domain.models import Chunk, DocSource, DocType, Document, SearchFilters
 
@@ -130,10 +131,36 @@ def metadata_filters(filters: SearchFilters | None) -> MetadataFilters | None:
     return MetadataFilters(filters=list(clauses)) if clauses else None
 
 
+class NodeZeroLastChromaVectorStore(ChromaVectorStore):
+    """ChromaVectorStore that writes a document's node 0 last.
+
+    Chroma has a batch limit and no transactions, so a crash can leave a document half written.
+    ChunkStore.has_document() checks only node 0, so writing it last makes a partial document
+    count as not indexed, and it is retried. The stock `add` writes in order, in batches of
+    41,665, and IngestionPipeline calls it directly, so the order is fixed here.
+
+    Chroma's `add` keeps rows whose id already exists, and ids are deterministic
+    (`{sha256}:{i}`), so a retry only adds what is missing.
+    """
+
+    _max_batch_size: int = PrivateAttr()
+
+    def __init__(self, collection: chromadb.Collection, max_batch_size: int) -> None:
+        super().__init__(chroma_collection=collection)
+        self._max_batch_size = max_batch_size
+
+    def add(self, nodes: Sequence[BaseNode], **add_kwargs: Any) -> list[str]:
+        size = self._max_batch_size
+        for start in reversed(range(0, len(nodes), size)):
+            super().add(list(nodes[start : start + size]), **add_kwargs)
+        return [node.node_id for node in nodes]
+
+
 class ChunkStore:
     """The vector store, and the document-level reads the API and ingestion need from it.
 
-    Search does not happen here: it goes through LlamaIndex's VectorIndexRetriever.
+    Writes go through `vector_store` (IngestionPipeline's target). Search does not happen here:
+    it goes through LlamaIndex's VectorIndexRetriever.
     """
 
     def __init__(self, path: Path, embedding_model: str, max_batch_size: int | None = None) -> None:
@@ -159,22 +186,10 @@ class ChunkStore:
                 f"Index at {path} was built without LlamaIndex (on the main branch). "
                 "Delete it and run scripts/ingest.py again."
             )
-        self.vector_store = ChromaVectorStore(chroma_collection=collection)
+        self.vector_store = NodeZeroLastChromaVectorStore(
+            collection, max_batch_size or client.get_max_batch_size()
+        )
         self._collection = collection
-        self._max_batch_size = max_batch_size or client.get_max_batch_size()
-
-    def add(self, nodes: Sequence[BaseNode]) -> None:
-        """Store a document's embedded nodes.
-
-        Chroma has a batch limit and no transactions, so a crash can leave a document half
-        written. Batches go in reverse, which makes node 0 the last one written: has_document()
-        checks only that node, so a partial document is retried. ChromaVectorStore writes with
-        Chroma's `add`, which keeps rows whose id already exists, and ids are deterministic
-        (`{sha256}:{i}`), so the retry only adds what is missing.
-        """
-        size = self._max_batch_size
-        for start in reversed(range(0, len(nodes), size)):
-            self.vector_store.add(list(nodes[start : start + size]))
 
     def has_document(self, doc_id: str) -> bool:
         return bool(self._collection.get(ids=[f"{doc_id}:0"], include=[])["ids"])
@@ -188,6 +203,11 @@ class ChunkStore:
 
     def all_nodes(self) -> list[BaseNode]:
         return self.vector_store.get_nodes(node_ids=None)
+
+    def complete_documents(self) -> set[str]:
+        """Documents whose node 0 is stored: has_document() is true for exactly these."""
+        ids = {document.doc_id for document, _ in self.documents()}
+        return {doc_id for doc_id in ids if self.has_document(doc_id)}
 
     def all_passages(self) -> list[tuple[Chunk, Document]]:
         return [node_passage(node) for node in self.all_nodes()]

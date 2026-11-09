@@ -29,8 +29,8 @@ from novabridge_qa.config import Settings
 from novabridge_qa.container import build_embedder, build_reranker
 from novabridge_qa.domain.models import DocumentMeta, ScoredPassage
 from novabridge_qa.ingestion.corpus import load_corpus
+from novabridge_qa.ingestion.indexing import ingest_file
 from novabridge_qa.ingestion.loaders import load_file
-from novabridge_qa.ingestion.pipeline import ingest_file
 from novabridge_qa.retrieval.bm25 import build_bm25
 from novabridge_qa.retrieval.embedder import CountingEmbedding
 from novabridge_qa.retrieval.reranker import Reranker

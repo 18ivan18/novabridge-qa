@@ -281,3 +281,23 @@ Found while building stage 5 (Nov 9, 2026):
 20. **`query(str)` takes only a string.** `/api/ask` passes filters and `top_k` per request, and reports timings, token counts and the refusal reason. So `GroundedQueryEngine` keeps `ask(question, filters, top_k) -> Answer` as the app's entry point, and `custom_query` wraps it: the `Response` carries the cited passages as `source_nodes`, in citation order, and the `Answer` in `metadata["answer"]`.
 21. **`CustomQueryEngine.query` skips instrumentation.** It overrides `BaseQueryEngine.query` without the `@dispatcher.span` decorator and without the `QueryStartEvent`/`QueryEndEvent` calls. LlamaIndex's instrumentation therefore sees the engine's retriever and LLM spans, but no query span. This is worth knowing before stage 6 adds an instrumentation handler.
 22. **The engine is a pydantic model.** Its fields are type-checked, so the `Retriever` Protocol is now `@runtime_checkable`. Constructor arguments must be keywords.
+
+Found while building stage 6 (Nov 9, 2026):
+
+23. **`IngestionPipeline` caches by default.** It builds an in-memory `IngestionCache` that keeps every run's nodes, embeddings included, for as long as the pipeline lives, and the upload service's pipeline lives as long as the server. The spike sets `disable_cache=True`; the docstore already skips re-runs.
+24. **The pipeline writes node 0 first.** It calls `vector_store.add` directly, and `ChromaVectorStore.add` writes in order, in batches of 41,665. A crash could then leave a half-written document that `has_document()` reports as indexed. The reverse batching moved from `ChunkStore.add` into `NodeZeroLastChromaVectorStore`, the store the pipeline writes to.
+25. **The docstore strategies.**
+    - The default, `upserts`, compares a document hash that covers text and metadata. Our metadata holds `ingested_at`, so the same file would hash differently on every run, and the pipeline would delete the indexed document and embed it again. `FilingDocument.hash` is the sha256 of the file's bytes, which is also its id.
+    - `duplicates_only` records a document in the docstore *before* running the transformations, so a failed embedding blocks every retry in that process. With that strategy, both retry tests fail.
+    - The docstore is not saved. It is rebuilt from Chroma when a pipeline is built: only documents whose node 0 is stored count. Chroma stays the single source of truth (D6).
+    - `store_doc_text=False` keeps the whole filing's text out of the docstore.
+26. **Instrumentation is global.** Handlers sit on the root dispatcher and see every event from every thread: query embeddings, other uploads. They also swallow every exception, so a handler bug is silent. The progress handler therefore:
+    - routes by an `instrument_tags` tag, a context variable, so other threads' events carry no tag;
+    - logs its own exceptions;
+    - gets the total from a `NodesParsedEvent` that `TenKNodeParser` emits, because LlamaIndex sends no event with the node count.
+
+    Progress now moves per embedding batch: 16 nodes with fastembed, where `main` moved every 64.
+27. **The write lock covers embedding.** The pipeline chunks, embeds and writes in one call, so a second upload now waits for the first to finish embedding, where `main` embedded both in parallel and serialized only the write.
+28. **`llama_index.core.instrumentation` re-exports without `__all__`**, so mypy strict flags `get_dispatcher` and `instrument_tags`. A mypy override sets `implicit_reexport` for that package rather than importing `llama_index_instrumentation`, a transitive dependency, directly.
+
+Stage 6 check: `scripts/ingest.py` on the corpus gives 1,023 chunks, as in stage 4, and a second run skips all six files. The retrieval eval was not rerun, because chunk content did not change.

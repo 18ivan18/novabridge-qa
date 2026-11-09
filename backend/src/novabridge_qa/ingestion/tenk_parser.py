@@ -18,6 +18,8 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Protocol, cast
 
+from llama_index.core.instrumentation import get_dispatcher
+from llama_index.core.instrumentation.events import BaseEvent
 from llama_index.core.node_parser import NodeParser, SentenceSplitter
 from llama_index.core.schema import BaseNode, MetadataMode
 from llama_index.core.schema import Document as LIDocument
@@ -26,7 +28,9 @@ from pydantic import PrivateAttr
 from novabridge_qa.domain.models import Chunk, DocSource, DocType, Document
 from novabridge_qa.ingestion.loaders import load_file
 from novabridge_qa.ingestion.sections import detect_sections
-from novabridge_qa.retrieval.store import chunk_node
+from novabridge_qa.retrieval.store import chunk_node, document_metadata
+
+dispatcher = get_dispatcher(__name__)
 
 MIN_CHUNK_TOKENS = 30
 
@@ -56,6 +60,37 @@ def split_sentences(text: str) -> list[str]:
         position = match.end()
     pieces.append(text[position:])
     return [piece for piece in pieces if piece]
+
+
+class NodesParsedEvent(BaseEvent):
+    """Sent once a document is chunked, so a progress handler knows how many nodes the
+    embedding events will cover."""
+
+    doc_id: str
+    count: int
+
+    @classmethod
+    def class_name(cls) -> str:
+        return "NodesParsedEvent"
+
+
+class FilingDocument(LIDocument):
+    """A file's text as a LlamaIndex Document. Its id and its hash are the sha256 of the file's
+    bytes.
+
+    The stock hash covers text and metadata, and the metadata holds `ingested_at`, so the same
+    file would hash differently each time. IngestionPipeline's upsert strategy would then delete
+    the indexed document and embed it again.
+    """
+
+    @property
+    def hash(self) -> str:
+        return self.id_
+
+
+def to_llamaindex(text: str, document: Document) -> FilingDocument:
+    # id_ must be the sha256: LlamaIndex writes the ref document id into Chroma's `doc_id` key.
+    return FilingDocument(id_=document.doc_id, text=text, metadata=document_metadata(document))
 
 
 def document_from_source(source: LIDocument) -> Document:
@@ -143,7 +178,9 @@ class TenKNodeParser(NodeParser):
         for source in nodes:
             document = document_from_source(cast(LIDocument, source))
             text = source.get_content(metadata_mode=MetadataMode.NONE)
-            out.extend(chunk_node(chunk, document) for chunk in self.chunks(text, document.doc_id))
+            parsed = [chunk_node(chunk, document) for chunk in self.chunks(text, document.doc_id)]
+            dispatcher.event(NodesParsedEvent(doc_id=document.doc_id, count=len(parsed)))
+            out.extend(parsed)
         return out
 
 

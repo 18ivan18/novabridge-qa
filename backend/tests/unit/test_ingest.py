@@ -1,15 +1,24 @@
 import json
-from datetime import date
+import threading
+from dataclasses import asdict
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
 from fake_embedding import FakeEmbedding
 from llama_index.core.base.embeddings.base import Embedding
+from llama_index.core.ingestion import IngestionPipeline
 from pydantic import Field
 
-from novabridge_qa.domain.models import DocumentMeta
+from novabridge_qa.domain.models import Document, DocumentMeta
 from novabridge_qa.ingestion.corpus import document_meta, load_corpus
-from novabridge_qa.ingestion.pipeline import ingest_file
+from novabridge_qa.ingestion.indexing import (
+    build_docstore,
+    build_pipeline,
+    ingest_file,
+    run_pipeline,
+)
+from novabridge_qa.ingestion.tenk_parser import to_llamaindex
 from novabridge_qa.retrieval.store import ChunkStore
 
 META = DocumentMeta(
@@ -128,3 +137,114 @@ def test_document_meta_maps_10k405_to_10k() -> None:
     assert meta.doc_type == "10-K"
     assert meta.title == "ACME Corp · Form 10-K"
     assert meta.period_end == date(2001, 1, 28)
+
+
+# IngestionPipeline
+
+
+def document(doc_id: str = "sha", ingested_at: datetime | None = None) -> Document:
+    return Document(
+        **asdict(META), doc_id=doc_id, ingested_at=ingested_at or datetime(2026, 1, 1, tzinfo=UTC)
+    )
+
+
+def pipeline_for(store: ChunkStore, embed_model: FakeEmbedding) -> IngestionPipeline:
+    return build_pipeline(embed_model, store, chunk_tokens=100, chunk_overlap=10)
+
+
+def test_the_docstore_skips_a_document_the_pipeline_already_stored(store: ChunkStore) -> None:
+    embed_model = RecordingEmbedding()
+    pipeline = pipeline_for(store, embed_model)
+
+    first = run_pipeline(pipeline, TEXT, document())
+    embedded = len(embed_model.batches)
+    second = run_pipeline(pipeline, TEXT, document(ingested_at=datetime.now(UTC)))
+
+    assert first
+    assert second == []
+    assert len(embed_model.batches) == embedded
+
+
+def test_the_docstore_is_rebuilt_from_chroma(store: ChunkStore) -> None:
+    run_pipeline(pipeline_for(store, FakeEmbedding()), TEXT, document())
+    embed_model = RecordingEmbedding()
+
+    assert run_pipeline(pipeline_for(store, embed_model), TEXT, document()) == []
+    assert embed_model.batches == []
+
+
+def test_a_partly_written_document_is_not_in_the_docstore(store: ChunkStore) -> None:
+    nodes = run_pipeline(pipeline_for(store, FakeEmbedding()), TEXT, document())
+    store.vector_store.delete_nodes(node_ids=[nodes[0].node_id])
+
+    assert build_docstore(store).get_document_hash("sha") is None
+    again = run_pipeline(pipeline_for(store, FakeEmbedding()), TEXT, document())
+    assert len(again) == len(nodes)
+    assert store.has_document("sha")
+
+
+def test_a_failed_embedding_can_be_retried_on_the_same_pipeline(store: ChunkStore) -> None:
+    # "duplicates_only" would record the document before embedding and skip the retry.
+    class FailingOnce(FakeEmbedding):
+        failed: bool = False
+
+        def _get_text_embeddings(self, texts: list[str]) -> list[Embedding]:
+            if not self.failed:
+                self.failed = True
+                raise RuntimeError("try again")
+            return super()._get_text_embeddings(texts)
+
+    pipeline = pipeline_for(store, FailingOnce())
+    with pytest.raises(RuntimeError):
+        run_pipeline(pipeline, TEXT, document())
+
+    assert run_pipeline(pipeline, TEXT, document())
+    assert store.has_document("sha")
+
+
+def test_the_pipeline_keeps_no_cache(store: ChunkStore) -> None:
+    assert pipeline_for(store, FakeEmbedding()).disable_cache
+
+
+def test_a_filings_hash_ignores_when_it_was_ingested() -> None:
+    later = document(ingested_at=datetime(2027, 1, 1, tzinfo=UTC))
+
+    assert to_llamaindex(TEXT, document()).hash == to_llamaindex(TEXT, later).hash == "sha"
+
+
+def test_progress_counts_this_documents_embeddings(store: ChunkStore) -> None:
+    calls: list[tuple[int, int]] = []
+
+    nodes = run_pipeline(
+        pipeline_for(store, FakeEmbedding(embed_batch_size=2)),
+        TEXT,
+        document(),
+        lambda done, total: calls.append((done, total)),
+    )
+
+    total = len(nodes)
+    assert calls[0] == (0, total)
+    assert calls[-1] == (total, total)
+    assert [done for done, _ in calls] == sorted(done for done, _ in calls)
+
+
+def test_progress_ignores_embeddings_outside_the_job(store: ChunkStore) -> None:
+    calls: list[tuple[int, int]] = []
+    other = FakeEmbedding()
+
+    class AlsoEmbedsElsewhere(FakeEmbedding):
+        def _get_text_embeddings(self, texts: list[str]) -> list[Embedding]:
+            # Another thread embeds (a search, another upload) while this job runs.
+            thread = threading.Thread(target=other.get_text_embedding_batch, args=[["x"] * 5])
+            thread.start()
+            thread.join()
+            return super()._get_text_embeddings(texts)
+
+    nodes = run_pipeline(
+        pipeline_for(store, AlsoEmbedsElsewhere()),
+        TEXT,
+        document(),
+        lambda done, total: calls.append((done, total)),
+    )
+
+    assert calls[-1] == (len(nodes), len(nodes))

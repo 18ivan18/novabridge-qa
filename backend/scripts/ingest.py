@@ -8,7 +8,7 @@ import time
 from novabridge_qa.config import Settings
 from novabridge_qa.container import build_embedder, build_store, rebuild_bm25
 from novabridge_qa.ingestion.corpus import load_corpus
-from novabridge_qa.ingestion.pipeline import ingest_file
+from novabridge_qa.ingestion.indexing import ingest_file
 
 
 def main() -> None:

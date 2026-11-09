@@ -13,7 +13,6 @@ from llama_index.core.base.embeddings.base import Embedding
 from novabridge_qa.api.deps import get_upload_service
 from novabridge_qa.container import Container, rebuild_bm25
 from novabridge_qa.domain.models import SearchFilters
-from novabridge_qa.ingestion import pipeline
 from novabridge_qa.ingestion.uploads import UploadService
 from novabridge_qa.retrieval.embedder import CountingEmbedding
 from novabridge_qa.retrieval.search import HybridSearch
@@ -235,10 +234,8 @@ def test_failed_upload_can_be_retried(app: FastAPI) -> None:
     assert job["status"] == "indexed"
 
 
-def test_progress_follows_the_embedding_batches(
-    app: FastAPI, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(pipeline, "EMBED_BATCH", 1)
+def test_progress_follows_the_embedding_batches(app: FastAPI) -> None:
+    # Progress comes from LlamaIndex's EmbeddingEndEvent, one per batch of embed_batch_size.
     seen: list[tuple[str, int]] = []
 
     class WatchingEmbedder(FakeEmbedding):
@@ -247,7 +244,7 @@ def test_progress_follows_the_embedding_batches(
                 seen.append((job.status, job.progress))
             return super()._get_text_embeddings(texts)
 
-    harness = Harness(app, WatchingEmbedder())
+    harness = Harness(app, WatchingEmbedder(embed_batch_size=1))
     harness.upload()
 
     assert len(seen) > 1

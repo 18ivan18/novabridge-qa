@@ -59,6 +59,11 @@ plugins = ["pydantic.mypy"]
 module = ["bm25s.*", "Stemmer", "llama_index.llms.openai_like.*"]
 ignore_missing_imports = true
 
+# These re-export their names from llama-index-instrumentation without an __all__.
+[[tool.mypy.overrides]]
+module = ["llama_index.core.instrumentation", "llama_index.core.instrumentation.*"]
+implicit_reexport = true
+
 # Optional: not installed unless the sentence-transformers extra is.
 [[tool.mypy.overrides]]
 module = ["sentence_transformers.*"]

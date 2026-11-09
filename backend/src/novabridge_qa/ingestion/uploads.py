@@ -10,6 +10,7 @@ from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from novabridge_qa.domain.models import DocType, Document, DocumentMeta
+from novabridge_qa.ingestion.indexing import build_pipeline, run_pipeline
 from novabridge_qa.ingestion.jobs import Job, JobRegistry
 from novabridge_qa.ingestion.loaders import (
     SUPPORTED_SUFFIXES,
@@ -18,7 +19,6 @@ from novabridge_qa.ingestion.loaders import (
     UnsupportedFormatError,
     load_file,
 )
-from novabridge_qa.ingestion.pipeline import embed_nodes, parse_loaded
 from novabridge_qa.retrieval.embedder import CountingEmbedding
 from novabridge_qa.retrieval.store import ChunkStore
 
@@ -47,15 +47,17 @@ class UploadService:
         chunk_tokens: int,
         chunk_overlap: int,
     ) -> None:
-        self._embed_model = embed_model
         self._store = store
         self._refresh_sparse = refresh_sparse
         self._uploads_dir = uploads_dir
         self._max_bytes = max_bytes
-        self._chunk_tokens = chunk_tokens
-        self._chunk_overlap = chunk_overlap
+        self._pipeline = build_pipeline(
+            embed_model, store, chunk_tokens=chunk_tokens, chunk_overlap=chunk_overlap
+        )
         self._jobs = JobRegistry()
-        # Keeps Chroma and BM25 in step: one writer at a time, and each rebuild sees every write.
+        # Keeps Chroma, the pipeline's docstore and BM25 in step: one writer at a time, and each
+        # rebuild sees every write. IngestionPipeline chunks, embeds and writes in one call, so
+        # the lock covers embedding too, and a second upload waits for the first.
         self._write_lock = threading.Lock()
 
     def job(self, job_id: str) -> Job | None:
@@ -127,27 +129,21 @@ class UploadService:
     ) -> None:
         self._jobs.update(job_id, "parsing", 10)
         document = Document(**asdict(meta), doc_id=doc_id, ingested_at=datetime.now(UTC))
-        nodes = parse_loaded(
-            loaded,
-            document,
-            self._embed_model,
-            chunk_tokens=self._chunk_tokens,
-            chunk_overlap=self._chunk_overlap,
-        )
-        if not nodes:
-            self._jobs.update(job_id, "failed", 0, error="This file has too little text to index.")
-            return
 
         def report(done: int, total: int) -> None:
-            progress = _EMBEDDING_START + round((_EMBEDDING_END - _EMBEDDING_START) * done / total)
+            share = done / total if total else 0.0
+            progress = _EMBEDDING_START + round((_EMBEDDING_END - _EMBEDDING_START) * share)
             self._jobs.update(job_id, "embedding", progress)
 
-        self._jobs.update(job_id, "embedding", _EMBEDDING_START)
-        embed_nodes(nodes, self._embed_model, report)
-
         with self._write_lock:
-            # Checked again here: the same file may have been indexed while this one was embedding.
-            if not self._store.has_document(doc_id):
-                self._store.add(nodes)
+            # Checked again here: the same file may have been indexed while this one waited.
+            if self._store.has_document(doc_id):
+                chunks = self._store.count_document_chunks(doc_id)
+            else:
+                chunks = len(run_pipeline(self._pipeline, loaded.text, document, report))
+                if not chunks:
+                    message = "This file has too little text to index."
+                    self._jobs.update(job_id, "failed", 0, error=message)
+                    return
                 self._refresh_sparse()
-        self._jobs.update(job_id, "indexed", 100, chunks=len(nodes))
+        self._jobs.update(job_id, "indexed", 100, chunks=chunks)

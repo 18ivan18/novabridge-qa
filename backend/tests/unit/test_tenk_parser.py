@@ -5,8 +5,12 @@ import pytest
 from llama_index.core.schema import MetadataMode
 
 from novabridge_qa.domain.models import Chunk, Document, indexed_text
-from novabridge_qa.ingestion.pipeline import to_llamaindex
-from novabridge_qa.ingestion.tenk_parser import MIN_CHUNK_TOKENS, TenKNodeParser, split_sentences
+from novabridge_qa.ingestion.tenk_parser import (
+    MIN_CHUNK_TOKENS,
+    TenKNodeParser,
+    split_sentences,
+    to_llamaindex,
+)
 from novabridge_qa.retrieval.store import node_passage
 
 
