@@ -1,3 +1,5 @@
+import { SectionLabel } from "@/components/SectionLabel";
+
 // The first is eval question a23, answered from a 2026 table. The second has no year, so its answer
 // covers both generations of filings. The last (u08) shows the no-evidence path.
 const EXAMPLES = [
@@ -9,12 +11,7 @@ const EXAMPLES = [
 export function ExampleQuestions({ onPick }: { onPick: (question: string) => void }) {
   return (
     <section aria-labelledby="examples" className="flex flex-col gap-3">
-      <h2
-        id="examples"
-        className="text-xs font-semibold tracking-[0.06em] text-muted-foreground uppercase"
-      >
-        Try a question
-      </h2>
+      <SectionLabel id="examples">Try a question</SectionLabel>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-3">
         {EXAMPLES.map(({ tag, question }) => (
           <button

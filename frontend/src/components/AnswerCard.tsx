@@ -25,15 +25,24 @@ export function AnswerCard({
   onSelectSource,
 }: AnswerCardProps) {
   const { answer, sources, retrieved, timings_ms: timings } = response;
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const paragraphs = useMemo(
     () => parseAnswer(answer, new Set(sources.map((source) => source.id))),
     [answer, sources],
   );
+  // Re-ranking can be switched off on the server; the passages say whether it ran.
+  const method = retrieved.some((passage) => passage.retrieval.rerank_rank !== null)
+    ? "hybrid retrieval + re-ranking"
+    : "hybrid retrieval";
 
   async function copy() {
-    await navigator.clipboard.writeText(answer);
-    setCopied(true);
+    try {
+      // Rejected outside a secure context, or when the browser denies clipboard access.
+      await navigator.clipboard.writeText(answer);
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
+    }
   }
 
   return (
@@ -46,7 +55,7 @@ export function AnswerCard({
           {question}
         </h1>
         <p className="font-mono text-xs text-muted-foreground">
-          hybrid retrieval · {plural(retrieved.length, "passage")} · {sources.length} cited · scope:{" "}
+          {method} · {plural(retrieved.length, "passage")} · {sources.length} cited · scope:{" "}
           {scopeLabel.toLowerCase()}
         </p>
       </div>
@@ -76,7 +85,7 @@ export function AnswerCard({
       )}
       <div className="flex flex-wrap gap-2.5">
         <Button variant="outline" onClick={() => void copy()}>
-          {copied ? "Copied" : "Copy answer"}
+          {{ idle: "Copy answer", copied: "Copied", failed: "Copy failed" }[copyState]}
         </Button>
         <Button variant="outline" aria-pressed={showDetails} onClick={onToggleDetails}>
           {showDetails ? "Hide retrieval details" : "Show retrieval details"}

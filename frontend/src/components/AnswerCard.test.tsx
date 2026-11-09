@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { makeResponse, makeSource } from "@/test/fixtures";
+import { makePassage, makeResponse, makeSource } from "@/test/fixtures";
 
 import { AnswerCard } from "./AnswerCard";
 
@@ -67,9 +67,21 @@ describe("AnswerCard", () => {
     renderCard();
 
     expect(
-      screen.getByText("hybrid retrieval · 3 passages · 2 cited · scope: all documents"),
+      screen.getByText(
+        "hybrid retrieval + re-ranking · 3 passages · 2 cited · scope: all documents",
+      ),
     ).toBeTruthy();
     expect(screen.getByText("All 2 citations point to retrieved passages")).toBeTruthy();
+  });
+
+  it("leaves re-ranking out of the summary when it did not run", () => {
+    const unranked = (number: number) => {
+      const passage = makePassage(number);
+      return { ...passage, retrieval: { ...passage.retrieval, rerank_rank: null } };
+    };
+    renderCard({ response: makeResponse({ retrieved: [unranked(1), unranked(2)] }) });
+
+    expect(screen.getByText(/^hybrid retrieval · 2 passages/)).toBeTruthy();
   });
 
   it("shows timings only with the details open", () => {
@@ -88,5 +100,15 @@ describe("AnswerCard", () => {
 
     expect(await screen.findByRole("button", { name: "Copied" })).toBeTruthy();
     expect(writeText).toHaveBeenCalledWith("ACME sells anvils [1]. They are heavy [2].");
+  });
+
+  it("says so when the browser refuses the clipboard", async () => {
+    const writeText = vi.fn().mockRejectedValue(new DOMException("Denied", "NotAllowedError"));
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    renderCard();
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy answer" }));
+
+    expect(await screen.findByRole("button", { name: "Copy failed" })).toBeTruthy();
   });
 });
