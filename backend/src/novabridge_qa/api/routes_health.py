@@ -18,6 +18,6 @@ def health(container: ContainerDep) -> HealthResponse:
         status="ok",
         llm_provider=container.settings.llm_provider,
         embedder=container.settings.embedding_model,
-        documents=container.dense_index.count_documents(),
-        chunks=container.dense_index.count_chunks(),
+        documents=container.store.count_documents(),
+        chunks=container.store.count_chunks(),
     )

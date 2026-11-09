@@ -9,7 +9,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
-from novabridge_qa.domain.models import DocType, Document, DocumentMeta, indexed_text
+from novabridge_qa.domain.models import DocType, Document, DocumentMeta
 from novabridge_qa.ingestion.jobs import Job, JobRegistry
 from novabridge_qa.ingestion.loaders import (
     SUPPORTED_SUFFIXES,
@@ -18,14 +18,13 @@ from novabridge_qa.ingestion.loaders import (
     UnsupportedFormatError,
     load_file,
 )
-from novabridge_qa.ingestion.pipeline import chunk_loaded
-from novabridge_qa.retrieval.dense import DenseIndex
-from novabridge_qa.retrieval.embedder import Embedder
+from novabridge_qa.ingestion.pipeline import embed_nodes, parse_loaded
+from novabridge_qa.retrieval.embedder import CountingEmbedding
+from novabridge_qa.retrieval.store import ChunkStore
 
 logger = logging.getLogger(__name__)
 
 # Embedding is the slow step, so its batches drive the progress bar from 20 to 90.
-EMBED_BATCH = 64
 _EMBEDDING_START = 20
 _EMBEDDING_END = 90
 
@@ -39,8 +38,8 @@ class FileTooLargeError(ValueError):
 class UploadService:
     def __init__(
         self,
-        embedder: Embedder,
-        dense: DenseIndex,
+        embed_model: CountingEmbedding,
+        store: ChunkStore,
         refresh_sparse: Callable[[], None],
         *,
         uploads_dir: Path,
@@ -48,8 +47,8 @@ class UploadService:
         chunk_tokens: int,
         chunk_overlap: int,
     ) -> None:
-        self._embedder = embedder
-        self._dense = dense
+        self._embed_model = embed_model
+        self._store = store
         self._refresh_sparse = refresh_sparse
         self._uploads_dir = uploads_dir
         self._max_bytes = max_bytes
@@ -89,9 +88,9 @@ class UploadService:
             raise FileTooLargeError(f"The file is larger than the {limit_mb} MB limit.")
 
         doc_id = hashlib.sha256(raw).hexdigest()
-        if self._dense.has_document(doc_id):
+        if self._store.has_document(doc_id):
             job = self._jobs.create(doc_id)
-            chunks = self._dense.count_document_chunks(doc_id)
+            chunks = self._store.count_document_chunks(doc_id)
             return self._jobs.update(job.job_id, "indexed", 100, chunks=chunks)
 
         self._uploads_dir.mkdir(parents=True, exist_ok=True)
@@ -127,30 +126,28 @@ class UploadService:
         self, job_id: str, doc_id: str, loaded: LoadedDocument, meta: DocumentMeta
     ) -> None:
         self._jobs.update(job_id, "parsing", 10)
-        chunks = chunk_loaded(
+        document = Document(**asdict(meta), doc_id=doc_id, ingested_at=datetime.now(UTC))
+        nodes = parse_loaded(
             loaded,
-            doc_id,
-            self._embedder,
+            document,
+            self._embed_model,
             chunk_tokens=self._chunk_tokens,
             chunk_overlap=self._chunk_overlap,
         )
-        if not chunks:
+        if not nodes:
             self._jobs.update(job_id, "failed", 0, error="This file has too little text to index.")
             return
 
-        document = Document(**asdict(meta), doc_id=doc_id, ingested_at=datetime.now(UTC))
-        texts = [indexed_text(chunk, document) for chunk in chunks]
-        embeddings: list[list[float]] = []
-        self._jobs.update(job_id, "embedding", _EMBEDDING_START)
-        for start in range(0, len(texts), EMBED_BATCH):
-            embeddings.extend(self._embedder.embed_documents(texts[start : start + EMBED_BATCH]))
-            share = len(embeddings) / len(texts)
-            progress = _EMBEDDING_START + round((_EMBEDDING_END - _EMBEDDING_START) * share)
+        def report(done: int, total: int) -> None:
+            progress = _EMBEDDING_START + round((_EMBEDDING_END - _EMBEDDING_START) * done / total)
             self._jobs.update(job_id, "embedding", progress)
+
+        self._jobs.update(job_id, "embedding", _EMBEDDING_START)
+        embed_nodes(nodes, self._embed_model, report)
 
         with self._write_lock:
             # Checked again here: the same file may have been indexed while this one was embedding.
-            if not self._dense.has_document(doc_id):
-                self._dense.add(document, chunks, embeddings)
+            if not self._store.has_document(doc_id):
+                self._store.add(nodes)
                 self._refresh_sparse()
-        self._jobs.update(job_id, "indexed", 100, chunks=len(chunks))
+        self._jobs.update(job_id, "indexed", 100, chunks=len(nodes))

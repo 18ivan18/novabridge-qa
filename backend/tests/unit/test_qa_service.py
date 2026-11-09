@@ -3,16 +3,17 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from fake_embedding import FakeEmbedding
+from index_helpers import add_chunks
 from scripted_llm import FakeLLM
 
 from novabridge_qa.domain.models import Chunk, Document, ScoredPassage, SearchFilters
 from novabridge_qa.llm.base import Completion, LLMError
 from novabridge_qa.qa.prompt import SYSTEM_PROMPT
 from novabridge_qa.qa.service import Answer, QAService
-from novabridge_qa.retrieval.dense import DenseIndex
-from novabridge_qa.retrieval.embedder import FakeEmbedder
 from novabridge_qa.retrieval.hybrid import HybridRetriever, SearchResult
 from novabridge_qa.retrieval.sparse import SparseIndex
+from novabridge_qa.retrieval.store import ChunkStore
 
 DOCUMENT = Document(
     title="ACME Corp · Form 10-K",
@@ -217,13 +218,12 @@ def test_top_k_defaults_to_the_setting() -> None:
 
 
 def test_end_to_end_with_a_real_index(tmp_path: Path) -> None:
-    dense = DenseIndex(tmp_path, "fake-model")
+    store = ChunkStore(tmp_path, "fake-model")
     texts = ["ACME sells anvils to coyotes.", "The warehouse roof leaks."]
     chunks = [Chunk(f"doc:{i}", "doc", t, None, None, 0, 1) for i, t in enumerate(texts)]
-    embedder = FakeEmbedder()
-    dense.add(DOCUMENT, chunks, embedder.embed_documents(texts))
-    sparse = SparseIndex.build(dense.all_passages())
-    retriever = HybridRetriever(embedder, dense, sparse, candidates=5, rrf_k=60)
+    add_chunks(store, DOCUMENT, chunks)
+    sparse = SparseIndex.build(store.all_passages())
+    retriever = HybridRetriever(FakeEmbedding(), store, sparse, candidates=5, rrf_k=60)
     service = QAService(
         retriever, FakeLLM(["ACME sells anvils [1]."]), top_k=2, min_relevance=0.1, max_tokens=100
     )

@@ -4,12 +4,19 @@ by a cross-encoder."""
 from dataclasses import dataclass, replace
 from typing import Literal, Protocol
 
-from novabridge_qa.domain.models import ScoredPassage, SearchFilters, indexed_text
-from novabridge_qa.retrieval.dense import DenseIndex
-from novabridge_qa.retrieval.embedder import Embedder
+from llama_index.core import VectorStoreIndex
+
+from novabridge_qa.domain.models import Chunk, Document, ScoredPassage, SearchFilters, indexed_text
+from novabridge_qa.retrieval.embedder import CountingEmbedding
 from novabridge_qa.retrieval.fusion import rrf
 from novabridge_qa.retrieval.reranker import Reranker
 from novabridge_qa.retrieval.sparse import SparseIndex
+from novabridge_qa.retrieval.store import (
+    ChunkStore,
+    chroma_cosine,
+    metadata_filters,
+    node_passage,
+)
 
 # "reranked" is the full pipeline; the others exist for the evaluation. Without a re-ranker,
 # "reranked" is the same as "hybrid".
@@ -26,6 +33,13 @@ class SearchResult:
     best_similarity: float | None
 
 
+@dataclass(frozen=True)
+class DenseHit:
+    chunk: Chunk
+    document: Document
+    similarity: float
+
+
 class Retriever(Protocol):
     def retrieve(
         self, query: str, k: int, filters: SearchFilters | None = None
@@ -35,8 +49,8 @@ class Retriever(Protocol):
 class HybridRetriever:
     def __init__(
         self,
-        embedder: Embedder,
-        dense: DenseIndex,
+        embed_model: CountingEmbedding,
+        store: ChunkStore,
         sparse: SparseIndex,
         *,
         candidates: int,
@@ -44,8 +58,12 @@ class HybridRetriever:
         reranker: Reranker | None = None,
         rerank_candidates: int = 20,
     ) -> None:
-        self._embedder = embedder
-        self._dense = dense
+        self._store = store
+        # embed_model is passed in: omitted, LlamaIndex would resolve Settings.embed_model,
+        # whose default is OpenAI's.
+        self._index = VectorStoreIndex.from_vector_store(
+            store.vector_store, embed_model=embed_model
+        )
         self._sparse = sparse
         self._candidates = candidates
         self._rrf_k = rrf_k
@@ -74,14 +92,11 @@ class HybridRetriever:
     ) -> SearchResult:
         """Return the top k passages. RRF of a single list keeps its order, so "dense" and
         "sparse" return that retriever's own ranking."""
-        dense_hits = []
-        if mode != "sparse":
-            query_vector = self._embedder.embed_query(query)
-            dense_hits = self._dense.search(query_vector, self._candidates, filters)
+        dense_hits = self._dense_search(query, filters) if mode != "sparse" else []
 
         sparse_ids: list[str] = []
         if mode != "dense":
-            allowed = self._dense.matching_ids(filters) if filters else None
+            allowed = self._store.matching_ids(filters) if filters else None
             sparse_hits = self._sparse.search(query, self._candidates, allowed)
             sparse_ids = [chunk_id for chunk_id, _ in sparse_hits]
 
@@ -95,7 +110,7 @@ class HybridRetriever:
         stored = {chunk_id: (hit.chunk, hit.document) for chunk_id, hit in hits_by_id.items()}
         # A chunk found only by BM25 still has to be fetched from Chroma.
         missing = [chunk_id for chunk_id, _ in fused if chunk_id not in stored]
-        stored.update(self._dense.get(missing))
+        stored.update(self._store.get(missing))
 
         passages = []
         for chunk_id, score in fused:
@@ -116,6 +131,19 @@ class HybridRetriever:
 
         best = max((hit.similarity for hit in dense_hits), default=None)
         return SearchResult(passages[:k], best)
+
+    def _dense_search(self, query: str, filters: SearchFilters | None) -> list[DenseHit]:
+        """LlamaIndex embeds the query with our model, which adds the bge query prefix."""
+        retriever = self._index.as_retriever(
+            similarity_top_k=self._candidates, filters=metadata_filters(filters)
+        )
+        hits = []
+        for hit in retriever.retrieve(query):
+            if hit.score is None:
+                raise ValueError(f"The vector store returned {hit.node.node_id} without a score")
+            chunk, document = node_passage(hit.node)
+            hits.append(DenseHit(chunk, document, chroma_cosine(hit.score)))
+        return hits
 
     def _rerank(self, query: str, passages: list[ScoredPassage]) -> list[ScoredPassage]:
         assert self._reranker is not None

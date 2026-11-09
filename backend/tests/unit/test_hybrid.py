@@ -3,14 +3,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from fake_embedding import FakeEmbedding
+from index_helpers import add_chunks
 
 from novabridge_qa.config import Settings
 from novabridge_qa.container import load_sparse_index
 from novabridge_qa.domain.models import Chunk, Document, SearchFilters
-from novabridge_qa.retrieval.dense import DenseIndex
-from novabridge_qa.retrieval.embedder import FakeEmbedder
 from novabridge_qa.retrieval.hybrid import HybridRetriever
 from novabridge_qa.retrieval.sparse import SparseIndex
+from novabridge_qa.retrieval.store import ChunkStore
 
 
 def make_document(doc_id: str, ticker: str, doc_type: str = "10-K") -> Document:
@@ -27,28 +28,28 @@ def make_document(doc_id: str, ticker: str, doc_type: str = "10-K") -> Document:
     )
 
 
-def add(index: DenseIndex, document: Document, *texts: str) -> None:
+def add(index: ChunkStore, document: Document, *texts: str) -> None:
     chunks = [
         Chunk(f"{document.doc_id}:{i}", document.doc_id, text, None, None, 0, 1)
         for i, text in enumerate(texts)
     ]
-    index.add(document, chunks, FakeEmbedder().embed_documents(texts))
+    add_chunks(index, document, chunks)
 
 
 @pytest.fixture
-def dense(tmp_path: Path) -> DenseIndex:
-    index = DenseIndex(tmp_path / "chroma", "fake-model")
+def dense(tmp_path: Path) -> ChunkStore:
+    index = ChunkStore(tmp_path / "chroma", "fake-model")
     add(index, make_document("a", "ACME"), "ACME sells anvils", "ACME roof leaks")
     add(index, make_document("b", "BETA", "8-K"), "BETA sells anvils", "BETA hires engineers")
     return index
 
 
-def make_retriever(dense: DenseIndex, candidates: int = 10) -> HybridRetriever:
+def make_retriever(dense: ChunkStore, candidates: int = 10) -> HybridRetriever:
     sparse = SparseIndex.build(dense.all_passages())
-    return HybridRetriever(FakeEmbedder(), dense, sparse, candidates=candidates, rrf_k=60)
+    return HybridRetriever(FakeEmbedding(), dense, sparse, candidates=candidates, rrf_k=60)
 
 
-def test_hybrid_reports_both_ranks(dense: DenseIndex) -> None:
+def test_hybrid_reports_both_ranks(dense: ChunkStore) -> None:
     passage = make_retriever(dense).search("anvils", 1)[0]
 
     assert passage.dense_rank is not None
@@ -57,14 +58,14 @@ def test_hybrid_reports_both_ranks(dense: DenseIndex) -> None:
     assert passage.rrf_score > 0
 
 
-def test_dense_mode_has_no_sparse_ranks(dense: DenseIndex) -> None:
+def test_dense_mode_has_no_sparse_ranks(dense: ChunkStore) -> None:
     passages = make_retriever(dense).search("anvils", 4, mode="dense")
 
     assert all(p.sparse_rank is None for p in passages)
     assert [p.dense_rank for p in passages] == [1, 2, 3, 4]
 
 
-def test_sparse_mode_finds_chunks_without_any_dense_data(dense: DenseIndex) -> None:
+def test_sparse_mode_finds_chunks_without_any_dense_data(dense: ChunkStore) -> None:
     passages = make_retriever(dense).search("engineers", 4, mode="sparse")
 
     assert [p.chunk.chunk_id for p in passages] == ["b:1"]
@@ -74,10 +75,10 @@ def test_sparse_mode_finds_chunks_without_any_dense_data(dense: DenseIndex) -> N
 
 
 def test_chunk_found_only_by_bm25_is_fetched_in_hybrid_mode(
-    dense: DenseIndex, monkeypatch: pytest.MonkeyPatch
+    dense: ChunkStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     retriever = make_retriever(dense)
-    monkeypatch.setattr(dense, "search", lambda *_: [])
+    monkeypatch.setattr(retriever, "_dense_search", lambda *_: [])
 
     passage = retriever.search("engineers", 4)[0]
 
@@ -87,12 +88,12 @@ def test_chunk_found_only_by_bm25_is_fetched_in_hybrid_mode(
     assert passage.sparse_rank == 1
 
 
-def test_k_limits_results(dense: DenseIndex) -> None:
+def test_k_limits_results(dense: ChunkStore) -> None:
     assert len(make_retriever(dense).search("anvils", 2)) == 2
 
 
 @pytest.mark.parametrize("mode", ["hybrid", "dense", "sparse"])
-def test_ticker_filter_applies_in_every_mode(dense: DenseIndex, mode: str) -> None:
+def test_ticker_filter_applies_in_every_mode(dense: ChunkStore, mode: str) -> None:
     filters = SearchFilters(tickers=("BETA",))
 
     passages = make_retriever(dense).search("anvils", 4, filters, mode)  # type: ignore[arg-type]
@@ -101,7 +102,7 @@ def test_ticker_filter_applies_in_every_mode(dense: DenseIndex, mode: str) -> No
     assert {p.document.ticker for p in passages} == {"BETA"}
 
 
-def test_ticker_and_doc_type_filters_combine(dense: DenseIndex) -> None:
+def test_ticker_and_doc_type_filters_combine(dense: ChunkStore) -> None:
     filters = SearchFilters(tickers=("ACME", "BETA"), doc_types=("8-K",))
 
     passages = make_retriever(dense).search("anvils", 4, filters)
@@ -109,16 +110,16 @@ def test_ticker_and_doc_type_filters_combine(dense: DenseIndex) -> None:
     assert {p.document.doc_type for p in passages} == {"8-K"}
 
 
-def test_empty_filters_restrict_nothing(dense: DenseIndex) -> None:
+def test_empty_filters_restrict_nothing(dense: ChunkStore) -> None:
     assert len(make_retriever(dense).search("anvils", 4, SearchFilters())) == 4
 
 
-def test_filter_matching_nothing_returns_nothing(dense: DenseIndex) -> None:
+def test_filter_matching_nothing_returns_nothing(dense: ChunkStore) -> None:
     assert make_retriever(dense).search("anvils", 4, SearchFilters(tickers=("NOPE",))) == []
 
 
 def test_sparse_index_is_rebuilt_when_it_falls_behind_chroma(
-    dense: DenseIndex, tmp_path: Path
+    dense: ChunkStore, tmp_path: Path
 ) -> None:
     settings = Settings(_env_file=None, data_dir=tmp_path)
     assert len(load_sparse_index(settings, dense)) == 4
@@ -140,10 +141,10 @@ class ScriptedReranker:
         return [float(sum(word in p for word in self.preferred)) for p in passages]
 
 
-def reranking(dense: DenseIndex, reranker: ScriptedReranker, candidates: int) -> HybridRetriever:
+def reranking(dense: ChunkStore, reranker: ScriptedReranker, candidates: int) -> HybridRetriever:
     sparse = SparseIndex.build(dense.all_passages())
     return HybridRetriever(
-        FakeEmbedder(),
+        FakeEmbedding(),
         dense,
         sparse,
         candidates=10,
@@ -153,7 +154,7 @@ def reranking(dense: DenseIndex, reranker: ScriptedReranker, candidates: int) ->
     )
 
 
-def test_the_reranker_sets_the_order(dense: DenseIndex) -> None:
+def test_the_reranker_sets_the_order(dense: ChunkStore) -> None:
     retriever = reranking(dense, ScriptedReranker("roof"), candidates=4)
 
     passages = retriever.search("ACME anvils", 4)
@@ -163,7 +164,7 @@ def test_the_reranker_sets_the_order(dense: DenseIndex) -> None:
     assert passages[0].rerank_score == 1.0
 
 
-def test_the_reranker_reads_the_title_with_the_passage(dense: DenseIndex) -> None:
+def test_the_reranker_reads_the_title_with_the_passage(dense: ChunkStore) -> None:
     reranker = ScriptedReranker()
 
     reranking(dense, reranker, candidates=4).search("ACME anvils", 1)
@@ -171,7 +172,7 @@ def test_the_reranker_reads_the_title_with_the_passage(dense: DenseIndex) -> Non
     assert "ACME report\nACME sells anvils" in reranker.seen
 
 
-def test_only_the_top_candidates_are_reranked(dense: DenseIndex) -> None:
+def test_only_the_top_candidates_are_reranked(dense: ChunkStore) -> None:
     reranker = ScriptedReranker("engineers")
     unranked = make_retriever(dense).search("ACME anvils", 4)
 
@@ -183,7 +184,7 @@ def test_only_the_top_candidates_are_reranked(dense: DenseIndex) -> None:
     assert [p.rerank_rank for p in passages[2:]] == [None, None]
 
 
-def test_hybrid_mode_skips_the_reranker(dense: DenseIndex) -> None:
+def test_hybrid_mode_skips_the_reranker(dense: ChunkStore) -> None:
     reranker = ScriptedReranker("roof")
 
     passages = reranking(dense, reranker, candidates=4).search("ACME anvils", 4, mode="hybrid")
@@ -192,7 +193,7 @@ def test_hybrid_mode_skips_the_reranker(dense: DenseIndex) -> None:
     assert passages == make_retriever(dense).search("ACME anvils", 4)
 
 
-def test_best_similarity_counts_candidates_the_reranker_pushed_out(dense: DenseIndex) -> None:
+def test_best_similarity_counts_candidates_the_reranker_pushed_out(dense: ChunkStore) -> None:
     retriever = reranking(dense, ScriptedReranker("engineers"), candidates=4)
     best = make_retriever(dense).search("ACME sells anvils", 1, mode="dense")[0]
 

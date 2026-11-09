@@ -32,7 +32,7 @@ Company = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, 
 def list_documents(container: ContainerDep) -> list[DocumentResponse]:
     return [
         DocumentResponse(**asdict(document), chunks=chunks)
-        for document, chunks in container.dense_index.documents()
+        for document, chunks in container.store.documents()
     ]
 
 

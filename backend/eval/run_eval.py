@@ -23,7 +23,7 @@ import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import get_args
+from typing import cast, get_args
 
 from novabridge_qa.config import Settings
 from novabridge_qa.container import build_embedder, build_reranker
@@ -31,11 +31,11 @@ from novabridge_qa.domain.models import DocumentMeta, ScoredPassage
 from novabridge_qa.ingestion.corpus import load_corpus
 from novabridge_qa.ingestion.loaders import load_file
 from novabridge_qa.ingestion.pipeline import ingest_file
-from novabridge_qa.retrieval.dense import DenseIndex
-from novabridge_qa.retrieval.embedder import Embedder
+from novabridge_qa.retrieval.embedder import CountingEmbedding
 from novabridge_qa.retrieval.hybrid import HybridRetriever, SearchMode
 from novabridge_qa.retrieval.reranker import Reranker
 from novabridge_qa.retrieval.sparse import SparseIndex
+from novabridge_qa.retrieval.store import ChunkStore
 
 EVAL_DIR = Path(__file__).parent
 CHUNK_SIZES = (200, 300, 400)
@@ -175,12 +175,12 @@ def validate(questions: Sequence[Question], texts: dict[str, str]) -> None:
 
 def build_retriever(
     settings: Settings,
-    embedder: Embedder,
+    embedder: CountingEmbedding,
     reranker: Reranker | None,
     chunk_tokens: int,
     directory: Path,
-) -> tuple[HybridRetriever, DenseIndex]:
-    dense = DenseIndex(directory, settings.embedding_model)
+) -> tuple[HybridRetriever, ChunkStore]:
+    dense = ChunkStore(directory, settings.embedding_model)
     for path, meta in load_corpus(settings.data_dir / "raw"):
         ingest_file(
             path,
@@ -323,8 +323,9 @@ def main() -> None:
                 )
                 candidate_rows.append((chunk_tokens, name, found))
 
+            # The value the relevance gate checks: the best dense similarity of the candidates.
             top: dict[str, float] = {
-                q.id: dense.search(embedder.embed_query(q.question), 1)[0].similarity
+                q.id: cast(float, retriever.retrieve(q.question, 1, mode="dense").best_similarity)
                 for q in questions
             }
             kept = [top[q.id] for q in answerable]

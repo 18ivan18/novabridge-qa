@@ -1,19 +1,21 @@
 import hashlib
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import pytest
+from fake_embedding import FakeEmbedding
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from httpx import Response
+from llama_index.core.base.embeddings.base import Embedding
 
 from novabridge_qa.api.deps import get_upload_service
 from novabridge_qa.container import Container, rebuild_sparse_index
 from novabridge_qa.domain.models import SearchFilters
-from novabridge_qa.ingestion import uploads
+from novabridge_qa.ingestion import pipeline
 from novabridge_qa.ingestion.uploads import UploadService
-from novabridge_qa.retrieval.embedder import Embedder, FakeEmbedder
+from novabridge_qa.retrieval.embedder import CountingEmbedding
 from novabridge_qa.retrieval.hybrid import HybridRetriever
 from novabridge_qa.retrieval.sparse import SparseIndex
 
@@ -25,9 +27,9 @@ FORM = {"company": "ACME Corp", "doc_type": "other"}
 
 
 class Harness:
-    def __init__(self, app: FastAPI, embedder: Embedder) -> None:
+    def __init__(self, app: FastAPI, embedder: CountingEmbedding) -> None:
         container: Container = app.state.container
-        self.dense = container.dense_index
+        self.dense = container.store
         self.uploads_dir = container.settings.data_dir / "uploads"
         self.refreshes = 0
         self.retriever = HybridRetriever(
@@ -64,7 +66,7 @@ class Harness:
 
 @pytest.fixture
 def harness(app: FastAPI) -> Harness:
-    return Harness(app, FakeEmbedder())
+    return Harness(app, FakeEmbedding())
 
 
 def test_upload_is_indexed_in_the_background(harness: Harness) -> None:
@@ -205,8 +207,8 @@ def test_file_too_short_to_chunk_fails_its_job(harness: Harness) -> None:
 
 
 def test_indexing_crash_fails_the_job_and_hides_the_cause(app: FastAPI) -> None:
-    class BrokenEmbedder(FakeEmbedder):
-        def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
+    class BrokenEmbedder(FakeEmbedding):
+        def _get_text_embeddings(self, texts: list[str]) -> list[Embedding]:
             raise RuntimeError("secret-path /etc/key")
 
     harness = Harness(app, BrokenEmbedder())
@@ -219,14 +221,14 @@ def test_indexing_crash_fails_the_job_and_hides_the_cause(app: FastAPI) -> None:
 
 
 def test_failed_upload_can_be_retried(app: FastAPI) -> None:
-    class FlakyEmbedder(FakeEmbedder):
-        failed = False
+    class FlakyEmbedder(FakeEmbedding):
+        failed: bool = False
 
-        def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
+        def _get_text_embeddings(self, texts: list[str]) -> list[Embedding]:
             if not self.failed:
                 self.failed = True
                 raise RuntimeError("try again")
-            return super().embed_documents(texts)
+            return super()._get_text_embeddings(texts)
 
     harness = Harness(app, FlakyEmbedder())
     harness.upload()
@@ -239,14 +241,14 @@ def test_failed_upload_can_be_retried(app: FastAPI) -> None:
 def test_progress_follows_the_embedding_batches(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(uploads, "EMBED_BATCH", 1)
+    monkeypatch.setattr(pipeline, "EMBED_BATCH", 1)
     seen: list[tuple[str, int]] = []
 
-    class WatchingEmbedder(FakeEmbedder):
-        def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
+    class WatchingEmbedder(FakeEmbedding):
+        def _get_text_embeddings(self, texts: list[str]) -> list[Embedding]:
             for job in harness.service._jobs._jobs.values():
                 seen.append((job.status, job.progress))
-            return super().embed_documents(texts)
+            return super()._get_text_embeddings(texts)
 
     harness = Harness(app, WatchingEmbedder())
     harness.upload()

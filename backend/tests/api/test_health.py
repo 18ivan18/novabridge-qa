@@ -2,12 +2,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from index_helpers import add_chunks
 
 from novabridge_qa.config import Settings
 from novabridge_qa.container import Container
 from novabridge_qa.domain.models import Chunk, Document
 from novabridge_qa.main import create_app
-from novabridge_qa.retrieval.embedder import FakeEmbedder
 
 
 def make_client(tmp_path: Path) -> TestClient:
@@ -42,7 +42,7 @@ def test_health_counts_what_is_indexed(tmp_path: Path) -> None:
         ingested_at=datetime.now(UTC),
     )
     chunks = [Chunk(f"doc:{i}", "doc", "anvils", None, None, 0, 6) for i in range(2)]
-    container.dense_index.add(document, chunks, FakeEmbedder().embed_documents(["a", "b"]))
+    add_chunks(container.store, document, chunks)
 
     body = client.get("/api/health").json()
 

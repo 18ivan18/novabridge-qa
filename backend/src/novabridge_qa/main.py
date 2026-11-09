@@ -27,7 +27,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """
     container: Container = app.state.container
     logging.basicConfig(level=container.settings.log_level)
-    services = build_services(container.settings, container.dense_index)
+    services = build_services(container.settings, container.store)
     app.state.qa_service = services.qa
     app.state.upload_service = services.uploads
     yield

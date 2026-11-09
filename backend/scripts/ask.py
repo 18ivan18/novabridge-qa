@@ -7,7 +7,7 @@ import argparse
 import sys
 
 from novabridge_qa.config import Settings
-from novabridge_qa.container import build_dense_index, build_services
+from novabridge_qa.container import build_services, build_store
 from novabridge_qa.llm.base import LLMError
 from novabridge_qa.qa.prompt import passage_source
 
@@ -18,7 +18,7 @@ def main() -> None:
     args = parser.parse_args()
 
     settings = Settings()
-    service = build_services(settings, build_dense_index(settings)).qa
+    service = build_services(settings, build_store(settings)).qa
     try:
         answer = service.ask(args.question)
     except LLMError as error:

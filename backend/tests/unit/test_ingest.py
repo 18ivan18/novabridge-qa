@@ -1,15 +1,16 @@
 import json
-from collections.abc import Sequence
 from datetime import date
 from pathlib import Path
 
 import pytest
+from fake_embedding import FakeEmbedding
+from llama_index.core.base.embeddings.base import Embedding
+from pydantic import Field
 
 from novabridge_qa.domain.models import DocumentMeta
 from novabridge_qa.ingestion.corpus import document_meta, load_corpus
 from novabridge_qa.ingestion.pipeline import ingest_file
-from novabridge_qa.retrieval.dense import DenseIndex
-from novabridge_qa.retrieval.embedder import FakeEmbedder
+from novabridge_qa.retrieval.store import ChunkStore
 
 META = DocumentMeta(
     title="ACME Corp · Form 10-K",
@@ -23,24 +24,18 @@ META = DocumentMeta(
 TEXT = "Item 1. Business\n\n" + "ACME Corp sells anvils to coyotes in the desert. " * 40
 
 
-class CountingEmbedder(FakeEmbedder):
-    calls = 0
+class RecordingEmbedding(FakeEmbedding):
+    """Records every batch of document texts it embeds."""
 
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:  # type: ignore[override]
-        self.calls += 1
-        return super().embed_documents(texts)
+    batches: list[list[str]] = Field(default_factory=list)
 
-
-class RecordingEmbedder(FakeEmbedder):
-    texts: Sequence[str] = ()
-
-    def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
-        self.texts = texts
-        return super().embed_documents(texts)
+    def _get_text_embeddings(self, texts: list[str]) -> list[Embedding]:
+        self.batches.append(texts)
+        return super()._get_text_embeddings(texts)
 
 
-def ingest(path: Path, embedder: FakeEmbedder, index: DenseIndex) -> tuple[str, int, bool]:
-    result = ingest_file(path, META, embedder, index, chunk_tokens=100, chunk_overlap=10)
+def ingest(path: Path, embed_model: FakeEmbedding, store: ChunkStore) -> tuple[str, int, bool]:
+    result = ingest_file(path, META, embed_model, store, chunk_tokens=100, chunk_overlap=10)
     return result.doc_id, result.chunks, result.skipped
 
 
@@ -51,50 +46,63 @@ def filing(tmp_path: Path) -> Path:
     return path
 
 
-def test_ingest_indexes_a_new_file(filing: Path, tmp_path: Path) -> None:
-    index = DenseIndex(tmp_path / "index", "fake-model")
+@pytest.fixture
+def store(tmp_path: Path) -> ChunkStore:
+    return ChunkStore(tmp_path / "index", "fake-model")
 
-    doc_id, chunks, skipped = ingest(filing, FakeEmbedder(), index)
+
+def test_ingest_indexes_a_new_file(filing: Path, store: ChunkStore) -> None:
+    doc_id, chunks, skipped = ingest(filing, FakeEmbedding(), store)
 
     assert not skipped
     assert chunks > 1
-    assert index.count_chunks() == chunks
-    assert index.has_document(doc_id)
+    assert store.count_chunks() == chunks
+    assert store.has_document(doc_id)
 
 
-def test_ingest_is_idempotent_and_does_not_embed_twice(filing: Path, tmp_path: Path) -> None:
-    index = DenseIndex(tmp_path / "index", "fake-model")
-    embedder = CountingEmbedder()
-    ingest(filing, embedder, index)
-    stored = index.count_chunks()
+def test_ingest_is_idempotent_and_does_not_embed_twice(filing: Path, store: ChunkStore) -> None:
+    embed_model = RecordingEmbedding()
+    ingest(filing, embed_model, store)
+    stored = store.count_chunks()
+    embedded = len(embed_model.batches)
 
-    _, _, skipped = ingest(filing, embedder, index)
+    _, _, skipped = ingest(filing, embed_model, store)
 
     assert skipped
-    assert embedder.calls == 1
-    assert index.count_chunks() == stored
+    assert len(embed_model.batches) == embedded
+    assert store.count_chunks() == stored
 
 
-def test_changed_content_is_a_new_document(filing: Path, tmp_path: Path) -> None:
-    index = DenseIndex(tmp_path / "index", "fake-model")
-    ingest(filing, FakeEmbedder(), index)
+def test_changed_content_is_a_new_document(filing: Path, store: ChunkStore) -> None:
+    ingest(filing, FakeEmbedding(), store)
     filing.write_text(TEXT + "New sentence about ACME.")
 
-    _, _, skipped = ingest(filing, FakeEmbedder(), index)
+    _, _, skipped = ingest(filing, FakeEmbedding(), store)
 
     assert not skipped
-    assert index.count_documents() == 2
+    assert store.count_documents() == 2
 
 
-def test_header_is_embedded_but_stored_text_stays_verbatim(filing: Path, tmp_path: Path) -> None:
-    index = DenseIndex(tmp_path / "index", "fake-model")
-    embedder = RecordingEmbedder()
+def test_header_is_embedded_but_stored_text_stays_verbatim(filing: Path, store: ChunkStore) -> None:
+    embed_model = RecordingEmbedding()
 
-    ingest(filing, embedder, index)
+    ingest(filing, embed_model, store)
 
-    assert embedder.texts[0].startswith("ACME Corp · Form 10-K · Item 1 — Business\n")
-    chunk, _ = index.all_passages()[0]
+    assert embed_model.batches[0][0].startswith("ACME Corp · Form 10-K · Item 1 — Business\n")
+    chunk, _ = store.all_passages()[0]
     assert "Form 10-K" not in chunk.text
+
+
+def test_chunks_keep_their_ids_and_offsets(filing: Path, store: ChunkStore) -> None:
+    # Deterministic ids are what make a retried ingest add only what is missing.
+    doc_id, chunks, _ = ingest(filing, FakeEmbedding(), store)
+
+    passages = sorted(store.all_passages(), key=lambda p: int(p[0].chunk_id.split(":")[1]))
+
+    assert [chunk.chunk_id for chunk, _ in passages] == [f"{doc_id}:{i}" for i in range(chunks)]
+    for chunk, document in passages:
+        assert TEXT[chunk.char_start : chunk.char_end] == chunk.text
+        assert document.doc_id == doc_id
 
 
 def test_load_corpus_lists_only_formats_with_a_loader(tmp_path: Path) -> None:

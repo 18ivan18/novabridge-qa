@@ -7,7 +7,7 @@ import argparse
 from typing import get_args
 
 from novabridge_qa.config import Settings
-from novabridge_qa.container import build_dense_index, build_embedder, build_retriever
+from novabridge_qa.container import build_embedder, build_retriever, build_store
 from novabridge_qa.retrieval.hybrid import SearchMode
 
 
@@ -19,7 +19,7 @@ def main() -> None:
     args = parser.parse_args()
 
     settings = Settings()
-    retriever = build_retriever(settings, build_embedder(settings), build_dense_index(settings))
+    retriever = build_retriever(settings, build_embedder(settings), build_store(settings))
     passages = retriever.search(args.query, args.k or settings.top_k, mode=args.mode)
 
     for rank, passage in enumerate(passages, start=1):

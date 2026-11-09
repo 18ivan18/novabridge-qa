@@ -3,17 +3,16 @@ from dataclasses import replace
 from api_helpers import DOCUMENT
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from index_helpers import add_chunks
 
 from novabridge_qa.container import Container
 from novabridge_qa.domain.models import Chunk
-from novabridge_qa.retrieval.embedder import FakeEmbedder
 
 
 def add(app: FastAPI, doc_id: str, title: str, chunks: int) -> None:
     container: Container = app.state.container
     items = [Chunk(f"{doc_id}:{i}", doc_id, "anvils", None, None, 0, 6) for i in range(chunks)]
-    vectors = FakeEmbedder().embed_documents(["anvils"] * chunks)
-    container.dense_index.add(replace(DOCUMENT, doc_id=doc_id, title=title), items, vectors)
+    add_chunks(container.store, replace(DOCUMENT, doc_id=doc_id, title=title), items)
 
 
 def test_empty_library(app: FastAPI) -> None:

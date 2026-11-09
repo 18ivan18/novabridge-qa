@@ -239,3 +239,12 @@ Found while building stage 1 (Nov 9, 2026):
 
 5. **No working Anthropic integration.** `llama-index-llms-anthropic` 0.12.3, the latest release, builds requests with `anthropic.types.MessageParam(...)`. That is a TypedDict up to SDK 1.17 and a `Union` from SDK 2.0, so with SDK 2.x every call raises `TypeError: Cannot instantiate typing.Union`. Downgrading to SDK 1.17 would also change the API version header from `2026-10-21` to `2023-06-01`. Ivan's decision: this branch supports `LLM_PROVIDER=openai_compatible` only (Groq, Ollama, OpenAI), and the comparison with main records Anthropic as lost. Two more defaults in that integration would also have needed overriding: it sends `temperature` unless the model id is in its `ANTHROPIC_NO_TEMP_MODELS` (API 2026-10-21 rejects it on every model), and on every call it raises `ValueError` for a model id missing from its context-window table, because the chat callback reads `metadata`.
 6. **Empty `choices`.** The OpenAI integration reads `response.choices[0]` without checking, so a reply with no choices raises `IndexError`. Our wrapper maps it to the existing "returned an empty response" error.
+
+Found while building stage 2 (Nov 9, 2026):
+
+7. **`ChromaVectorStore.add` uses Chroma's `add`, not `upsert`.** A row whose id already exists is kept as it was. With deterministic `{sha256}:{i}` ids and node 0 written last, a retry after a crash still adds exactly what is missing; a test crashes the second batch and retries.
+8. **`get_nodes(node_ids=[])` returns every node**, because an empty list becomes "no filter". `ChunkStore.get` returns early on an empty list.
+9. **`NodeParser` post-processing.** By default it merges the parent document's metadata into each node (putting the document's keys first) and overwrites `start_char_idx` with its own `text.find()`. Our parser sets `include_metadata=False` and keeps offsets in its own `char_start` / `char_end` metadata.
+10. **Indexes are not interchangeable with main.** Nodes are stored as JSON in `_node_content`. `ChunkStore` refuses an index written on main (`IndexFormatError`), because ingestion would otherwise skip its documents as already indexed. Each branch needs its own `data/index`.
+11. **`run_eval.py` read the store directly** for the gate table. It now asks the retriever for `best_similarity` in dense mode: the value the gate checks.
+

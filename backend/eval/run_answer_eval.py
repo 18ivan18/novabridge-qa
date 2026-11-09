@@ -40,7 +40,7 @@ from run_eval import (
 )
 
 from novabridge_qa.config import Settings
-from novabridge_qa.container import build_dense_index, build_services
+from novabridge_qa.container import build_services, build_store
 from novabridge_qa.domain.models import ScoredPassage
 from novabridge_qa.ingestion.corpus import load_corpus
 from novabridge_qa.ingestion.loaders import load_file
@@ -514,7 +514,7 @@ def main() -> None:
     formats = {key: path.suffix.lower() for path, key in keys}
 
     if args.command == "ask":
-        dense = build_dense_index(settings)
+        dense = build_store(settings)
         header = run_header(settings, dense.count_chunks())
         name = args.run or default_run_name(header["model"])
         path = RUNS_DIR / f"{name}.jsonl"

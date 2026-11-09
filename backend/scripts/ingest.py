@@ -6,7 +6,7 @@ Run from backend/: uv run python scripts/ingest.py
 import time
 
 from novabridge_qa.config import Settings
-from novabridge_qa.container import build_dense_index, build_embedder, rebuild_sparse_index
+from novabridge_qa.container import build_embedder, build_store, rebuild_sparse_index
 from novabridge_qa.ingestion.corpus import load_corpus
 from novabridge_qa.ingestion.pipeline import ingest_file
 
@@ -14,7 +14,7 @@ from novabridge_qa.ingestion.pipeline import ingest_file
 def main() -> None:
     settings = Settings()
     embedder = build_embedder(settings)
-    index = build_dense_index(settings)
+    index = build_store(settings)
 
     for path, meta in load_corpus(settings.data_dir / "raw"):
         started = time.perf_counter()
